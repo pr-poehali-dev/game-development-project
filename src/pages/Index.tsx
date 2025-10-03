@@ -87,170 +87,66 @@ const Index = () => {
   const [chatHistory, setChatHistory] = useState<{sender: string, text: string}[]>([]);
   const [discoveredTraits, setDiscoveredTraits] = useState<string[]>([]);
 
-  const playSound = (type: 'knock' | 'door' | 'footstep' | 'gunshot' | 'scream' | 'wind' | 'breath' | 'heartbeat' | 'whisper' | 'click' | 'success' | 'error' | 'night' | 'warning') => {
+  let audioContext: AudioContext | null = null;
+
+  const getAudioContext = () => {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return audioContext;
+  };
+
+  const playSound = (type: 'knock' | 'door' | 'footstep' | 'gunshot' | 'scream' | 'click') => {
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const ctx = getAudioContext();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
       
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(ctx.destination);
       
       switch(type) {
         case 'knock':
-          oscillator.type = 'square';
           oscillator.frequency.value = 200;
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.1);
-          setTimeout(() => playSound('knock'), 150);
-          setTimeout(() => playSound('knock'), 300);
+          gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 0.1);
           break;
         case 'gunshot':
-          oscillator.type = 'sawtooth';
           oscillator.frequency.value = 100;
-          gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.2);
+          gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 0.2);
           break;
         case 'scream':
-          oscillator.type = 'sawtooth';
           oscillator.frequency.value = 400;
-          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-          oscillator.frequency.exponentialRampToValueAtTime(300, audioContext.currentTime + 0.5);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.5);
+          gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 0.4);
           break;
         case 'door':
-          oscillator.type = 'square';
           oscillator.frequency.value = 150;
-          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.3);
+          gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 0.3);
           break;
         case 'footstep':
-          oscillator.type = 'square';
           oscillator.frequency.value = 80;
-          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.15);
-          break;
-        case 'wind':
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 60;
-          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 2);
-          oscillator.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 2);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 2);
-          break;
-        case 'breath':
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 200;
-          gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
-          gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.3);
-          gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.6);
-          break;
-        case 'heartbeat':
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 80;
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.15);
-          setTimeout(() => {
-            const osc2 = audioContext.createOscillator();
-            const gain2 = audioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(audioContext.destination);
-            osc2.type = 'sine';
-            osc2.frequency.value = 80;
-            gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-            osc2.start(audioContext.currentTime);
-            osc2.stop(audioContext.currentTime + 0.15);
-          }, 150);
-          break;
-        case 'whisper':
-          oscillator.type = 'triangle';
-          oscillator.frequency.value = 300;
-          gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
-          oscillator.frequency.exponentialRampToValueAtTime(250, audioContext.currentTime + 0.8);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.8);
+          gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 0.1);
           break;
         case 'click':
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 800;
-          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.05);
-          break;
-        case 'success':
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 523;
-          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.3);
-          setTimeout(() => {
-            const osc2 = audioContext.createOscillator();
-            const gain2 = audioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(audioContext.destination);
-            osc2.type = 'sine';
-            osc2.frequency.value = 659;
-            gain2.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-            osc2.start(audioContext.currentTime);
-            osc2.stop(audioContext.currentTime + 0.4);
-          }, 100);
-          break;
-        case 'error':
-          oscillator.type = 'sawtooth';
-          oscillator.frequency.value = 200;
-          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-          oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.3);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.3);
-          break;
-        case 'night':
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 100;
-          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.5);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 1.5);
-          break;
-        case 'warning':
-          oscillator.type = 'square';
-          oscillator.frequency.value = 440;
-          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.2);
-          setTimeout(() => {
-            const osc2 = audioContext.createOscillator();
-            const gain2 = audioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(audioContext.destination);
-            osc2.type = 'square';
-            osc2.frequency.value = 440;
-            gain2.gain.setValueAtTime(0.15, audioContext.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-            osc2.start(audioContext.currentTime);
-            osc2.stop(audioContext.currentTime + 0.2);
-          }, 250);
+          oscillator.frequency.value = 600;
+          gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 0.05);
           break;
       }
     } catch (e) {
@@ -345,9 +241,6 @@ const Index = () => {
     }]);
 
     setTimeout(() => {
-      if (currentArrival.isInfected) {
-        playSound('breath');
-      }
       const nextIndex = currentArrival.currentDialogueIndex + 1;
       if (nextIndex < currentArrival.dialogue.length) {
         setChatHistory(prev => [...prev, {
@@ -375,10 +268,6 @@ const Index = () => {
     setTimeout(() => playSound('footstep'), 300);
     setTimeout(() => playSound('footstep'), 600);
     
-    if (currentArrival.isStranger) {
-      playSound('whisper');
-    }
-    
     setPeopleInHouse(prev => [...prev, currentArrival]);
     setJournalEntries(prev => [...prev, `День ${day}: Впустили ${currentArrival.name} в дом.`]);
     setCurrentArrival(null);
@@ -391,7 +280,6 @@ const Index = () => {
     if (!currentArrival) return;
     
     playSound('door');
-    playSound('wind');
     if (currentArrival.isInfected) {
       setTimeout(() => playSound('scream'), 500);
     }
@@ -413,8 +301,6 @@ const Index = () => {
     if (!selectedPerson || discoveredTraits.includes(traitName)) return;
     
     if (selectedPerson.isStranger) {
-      playSound('error');
-      playSound('whisper');
       setChatHistory(prev => [...prev, {
         sender: 'system',
         text: `❌ Незнакомца невозможно проверить. Он другой...`
@@ -426,14 +312,11 @@ const Index = () => {
     setDiscoveredTraits(prev => [...prev, traitName]);
     
     if (selectedPerson.suspiciousTraits.includes(traitName)) {
-      playSound('warning');
-      setTimeout(() => playSound('heartbeat'), 300);
       setChatHistory(prev => [...prev, {
         sender: 'system',
         text: `⚠️ Обнаружен признак: ${traitName}`
       }]);
     } else {
-      playSound('success');
       setChatHistory(prev => [...prev, {
         sender: 'system',
         text: `✓ ${traitName}: норма`
@@ -463,15 +346,11 @@ const Index = () => {
 
     setTimeout(() => {
       if (selectedPerson.isStranger && selectedPerson.strangerStory) {
-        playSound('whisper');
         setChatHistory(prev => [...prev, {
           sender: selectedPerson.name,
           text: selectedPerson.strangerStory
         }]);
       } else {
-        if (selectedPerson.isInfected) {
-          playSound('breath');
-        }
         const nextIndex = selectedPerson.currentDialogueIndex + 1;
         if (nextIndex < selectedPerson.dialogue.length) {
           setChatHistory(prev => [...prev, {
@@ -498,8 +377,6 @@ const Index = () => {
     
     if (selectedPerson.isStranger) {
       playSound('gunshot');
-      playSound('whisper');
-      playSound('error');
       setChatHistory(prev => [...prev, {
         sender: 'system',
         text: `❌ Незнакомца нельзя убить. Пули проходят сквозь него...`
@@ -515,7 +392,6 @@ const Index = () => {
       setJournalEntries(prev => [...prev, `День ${day}: Застрелили ${selectedPerson.name}. Это был заражённый. Правильное решение.`]);
     } else {
       setTimeout(() => playSound('scream'), 200);
-      playSound('error');
       setPeopleInHouse(prev => prev.filter(p => p.id !== selectedPerson.id));
       setJournalEntries(prev => [...prev, `День ${day}: Застрелили невинного ${selectedPerson.name}... Ошибка.`]);
     }
@@ -527,7 +403,6 @@ const Index = () => {
   const finishInspection = () => {
     if (!selectedPerson) return;
     
-    playSound('success');
     setPeopleInHouse(prev => 
       prev.map(p => p.id === selectedPerson.id ? { ...p, wasChecked: true } : p)
     );
@@ -541,7 +416,6 @@ const Index = () => {
     const uncheckedInfected = peopleInHouse.find(p => p.isInfected && !p.wasChecked && !p.isStranger);
     
     if (uncheckedInfected) {
-      playSound('night');
       setTimeout(() => playSound('scream'), 800);
       setTimeout(() => playSound('scream'), 1500);
       setJournalEntries(prev => [...prev, `Ночь дня ${day}: ${uncheckedInfected.name} потерял контроль. Паразит взял верх. Все мертвы.`]);
@@ -553,8 +427,6 @@ const Index = () => {
 
     if (peopleInHouse.length === 0) {
       setAloneWarning(true);
-      playSound('night');
-      setTimeout(() => playSound('wind'), 500);
       setTimeout(() => playSound('scream'), 1200);
       setJournalEntries(prev => [...prev, `Ночь дня ${day}: Вы остались один. Гости придут и убьют вас...`]);
       setTimeout(() => {
@@ -565,8 +437,6 @@ const Index = () => {
     }
 
     const nextDay = day + 1;
-    playSound('night');
-    setTimeout(() => playSound('success'), 800);
     setDay(nextDay);
     setSurvivedDays(prev => prev + 1);
     setJournalEntries(prev => [...prev, `Ночь дня ${day}: День прошёл. Все живы. Вы не одиноки.`]);
