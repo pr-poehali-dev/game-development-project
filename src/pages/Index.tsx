@@ -18,6 +18,8 @@ interface Person {
   wasChecked: boolean;
   dialogue: string[];
   currentDialogueIndex: number;
+  isStranger?: boolean;
+  strangerStory?: string;
 }
 
 const guestTraits = [
@@ -136,7 +138,37 @@ const Index = () => {
     }
   };
 
-  const generatePerson = (): Person => {
+  const strangerStories = [
+    "День 1: Меня выгнали из паба... Я лишь сказал им: 'Хватит быть тварями, давайте быть людьми'. Они не поняли...",
+    "День 2: Я видел, как паразит берёт контроль. Сначала глаза... потом разум. Но меня он не тронет.",
+    "День 3: Люди боятся холода. Но холод — это не враг. Враг — это то, что внутри них.",
+    "День 4: Я помню времена до аномалии. Мы были другими... или нет?",
+    "День 5: Паразит не может меня заразить. Я знаю почему, но не могу сказать.",
+    "День 6: Каждую ночь я слышу их шёпот. Они зовут меня. Но я не иду.",
+    "День 7: Скоро всё закончится. Или начнётся заново.",
+  ];
+
+  const generatePerson = (forceStranger: boolean = false): Person => {
+    if (forceStranger) {
+      return {
+        id: Date.now(),
+        name: 'Незнакомец',
+        isInfected: false,
+        avatar: '🚶‍♂️',
+        suspiciousTraits: [],
+        wasChecked: false,
+        dialogue: [
+          "Это я... Незнакомец. Впустите, пожалуйста.",
+          "У меня есть что рассказать вам.",
+          "Каждый день я открою вам новую правду.",
+          "Меня нельзя проверить. Я... другой."
+        ],
+        currentDialogueIndex: 0,
+        isStranger: true,
+        strangerStory: strangerStories[day - 1] || "..."
+      };
+    }
+
     const isInfected = Math.random() > 0.6;
     const names = ['Алексей', 'Мария', 'Иван', 'Елена', 'Дмитрий', 'Анна', 'Сергей', 'Ольга'];
     const suspiciousCount = isInfected ? Math.floor(Math.random() * 3) + 2 : Math.floor(Math.random() * 2);
@@ -166,7 +198,7 @@ const Index = () => {
     setDay(1);
     setSurvivedDays(0);
     setJournalEntries(['День 1: Начался аномальный холод. Выходить на улицу опасно. Одному оставаться нельзя — гости найдут и убьют.']);
-    setCurrentArrival(generatePerson());
+    setCurrentArrival(generatePerson(true));
     setGameState('arrival');
     setAloneWarning(false);
     playSound('knock');
@@ -245,6 +277,14 @@ const Index = () => {
   const checkTrait = (traitName: string) => {
     if (!selectedPerson || discoveredTraits.includes(traitName)) return;
     
+    if (selectedPerson.isStranger) {
+      setChatHistory(prev => [...prev, {
+        sender: 'system',
+        text: `❌ Незнакомца невозможно проверить. Он другой...`
+      }]);
+      return;
+    }
+    
     playSound('footstep');
     setDiscoveredTraits(prev => [...prev, traitName]);
     
@@ -280,20 +320,27 @@ const Index = () => {
     }]);
 
     setTimeout(() => {
-      const nextIndex = selectedPerson.currentDialogueIndex + 1;
-      if (nextIndex < selectedPerson.dialogue.length) {
+      if (selectedPerson.isStranger && selectedPerson.strangerStory) {
         setChatHistory(prev => [...prev, {
           sender: selectedPerson.name,
-          text: selectedPerson.dialogue[nextIndex]
+          text: selectedPerson.strangerStory
         }]);
-        setSelectedPerson({...selectedPerson, currentDialogueIndex: nextIndex});
       } else {
-        setChatHistory(prev => [...prev, {
-          sender: selectedPerson.name,
-          text: selectedPerson.isInfected 
-            ? "Я... я хочу спать..." 
-            : "Спасибо за помощь. Надеюсь, мы выживем."
-        }]);
+        const nextIndex = selectedPerson.currentDialogueIndex + 1;
+        if (nextIndex < selectedPerson.dialogue.length) {
+          setChatHistory(prev => [...prev, {
+            sender: selectedPerson.name,
+            text: selectedPerson.dialogue[nextIndex]
+          }]);
+          setSelectedPerson({...selectedPerson, currentDialogueIndex: nextIndex});
+        } else {
+          setChatHistory(prev => [...prev, {
+            sender: selectedPerson.name,
+            text: selectedPerson.isInfected 
+              ? "Я... я хочу спать..." 
+              : "Спасибо за помощь. Надеюсь, мы выживем."
+          }]);
+        }
       }
     }, 1000);
 
@@ -302,6 +349,14 @@ const Index = () => {
 
   const shootPerson = () => {
     if (!selectedPerson) return;
+    
+    if (selectedPerson.isStranger) {
+      setChatHistory(prev => [...prev, {
+        sender: 'system',
+        text: `❌ Незнакомца нельзя убить. Пули проходят сквозь него...`
+      }]);
+      return;
+    }
     
     playSound('gunshot');
     
@@ -331,7 +386,7 @@ const Index = () => {
   };
 
   const endDay = () => {
-    const uncheckedInfected = peopleInHouse.find(p => p.isInfected && !p.wasChecked);
+    const uncheckedInfected = peopleInHouse.find(p => p.isInfected && !p.wasChecked && !p.isStranger);
     
     if (uncheckedInfected) {
       playSound('scream');
@@ -353,10 +408,13 @@ const Index = () => {
       return;
     }
 
-    setDay(prev => prev + 1);
+    const nextDay = day + 1;
+    setDay(nextDay);
     setSurvivedDays(prev => prev + 1);
     setJournalEntries(prev => [...prev, `Ночь дня ${day}: День прошёл. Все живы. Вы не одиноки.`]);
-    setCurrentArrival(generatePerson());
+    
+    const hasStranger = peopleInHouse.some(p => p.isStranger);
+    setCurrentArrival(hasStranger ? generatePerson() : (nextDay <= 7 && Math.random() > 0.5 ? generatePerson(true) : generatePerson()));
     setGameState('arrival');
     playSound('knock');
   };
@@ -566,7 +624,12 @@ const Index = () => {
                               <div className="text-3xl">{person.avatar}</div>
                               <div>
                                 <h3 className="font-semibold">{person.name}</h3>
-                                {person.wasChecked && (
+                                {person.isStranger && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Неизвестен
+                                  </Badge>
+                                )}
+                                {person.wasChecked && !person.isStranger && (
                                   <Badge variant="default" className="text-xs">
                                     Проверен
                                   </Badge>
@@ -635,6 +698,11 @@ const Index = () => {
                   <div className="text-center">
                     <div className="text-8xl mb-4">{selectedPerson.avatar}</div>
                     <h3 className="text-2xl font-bold">{selectedPerson.name}</h3>
+                    {selectedPerson.isStranger && (
+                      <Badge variant="secondary" className="mt-2">
+                        Нельзя проверить
+                      </Badge>
+                    )}
                   </div>
 
                   <Button 
@@ -844,6 +912,15 @@ const Index = () => {
                 <div className="text-center mb-4">
                   <div className="text-6xl mb-2">{selectedPerson.avatar}</div>
                   <h3 className="text-xl font-bold">{selectedPerson.name}</h3>
+                  {selectedPerson.isStranger && selectedPerson.strangerStory && (
+                    <div className="mt-4 p-4 bg-secondary/50 rounded-lg text-sm text-left">
+                      <p className="font-semibold mb-2 flex items-center">
+                        <Icon name="BookOpen" className="mr-2" size={16} />
+                        История Незнакомца:
+                      </p>
+                      <p className="text-muted-foreground italic">{selectedPerson.strangerStory}</p>
+                    </div>
+                  )}
                 </div>
 
                 <ScrollArea className="h-[400px] border rounded-lg p-4 bg-secondary/20">
