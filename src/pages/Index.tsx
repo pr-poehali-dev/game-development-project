@@ -5,8 +5,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 
-type GameState = 'menu' | 'arrival' | 'house' | 'kcs' | 'journal';
+type GameState = 'menu' | 'arrival' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal';
 
 interface Person {
   id: number;
@@ -15,20 +16,43 @@ interface Person {
   avatar: string;
   suspiciousTraits: string[];
   wasChecked: boolean;
+  dialogue: string[];
+  currentDialogueIndex: number;
 }
 
 const guestTraits = [
-  { id: 1, name: 'Необычные движения', icon: 'Move', description: 'Резкие, угловатые движения после заражения паразитом' },
-  { id: 2, name: 'Странное дыхание', icon: 'Wind', description: 'Паразит влияет на дыхательные функции' },
-  { id: 3, name: 'Блеск глаз', icon: 'Eye', description: 'Стеклянный взгляд — признак контроля паразита' },
-  { id: 4, name: 'Температура тела', icon: 'Thermometer', description: 'Холодная кожа из-за обморожения' },
-  { id: 5, name: 'Отсутствие эмоций', icon: 'UserX', description: 'Паразит подавляет эмоциональные реакции' },
-  { id: 6, name: 'Нечёткое отражение', icon: 'Mirror', description: 'Аномалия, связанная с паразитом' },
-  { id: 7, name: 'Необычные звуки', icon: 'Volume2', description: 'Шёпот и хрипы при деградации мозга' },
-  { id: 8, name: 'Неадекватные ответы', icon: 'MessageSquare', description: 'Потеря когнитивных функций' },
-  { id: 9, name: 'Отсутствие тени', icon: 'Sun', description: 'Неизученная аномалия паразита' },
-  { id: 10, name: 'Изменение запаха', icon: 'Scan', description: 'Разложение тканей под контролем паразита' },
+  { id: 1, name: 'Необычные движения', icon: 'Move', description: 'Резкие, угловатые движения после заражения паразитом', check: 'Проверить движения' },
+  { id: 2, name: 'Странное дыхание', icon: 'Wind', description: 'Паразит влияет на дыхательные функции', check: 'Послушать дыхание' },
+  { id: 3, name: 'Блеск глаз', icon: 'Eye', description: 'Стеклянный взгляд — признак контроля паразита', check: 'Посмотреть в глаза' },
+  { id: 4, name: 'Температура тела', icon: 'Thermometer', description: 'Холодная кожа из-за обморожения', check: 'Проверить руки' },
+  { id: 5, name: 'Отсутствие эмоций', icon: 'UserX', description: 'Паразит подавляет эмоциональные реакции', check: 'Задать вопрос' },
+  { id: 6, name: 'Нечёткое отражение', icon: 'Mirror', description: 'Аномалия, связанная с паразитом', check: 'Проверить зеркалом' },
+  { id: 7, name: 'Необычные звуки', icon: 'Volume2', description: 'Шёпот и хрипы при деградации мозга', check: 'Послушать голос' },
+  { id: 8, name: 'Неадекватные ответы', icon: 'MessageSquare', description: 'Потеря когнитивных функций', check: 'Провести беседу' },
+  { id: 9, name: 'Отсутствие тени', icon: 'Sun', description: 'Неизученная аномалия паразита', check: 'Проверить тень' },
+  { id: 10, name: 'Изменение запаха', icon: 'Scan', description: 'Разложение тканей под контролем паразита', check: 'Понюхать' },
 ];
+
+const dialogues = {
+  normal: [
+    "Спасибо, что впустили! Там на улице невыносимо холодно...",
+    "Я шёл из соседнего района, видел много замёрзших людей.",
+    "Как вы думаете, когда закончится этот кошмар?",
+    "У вас есть что-нибудь поесть? Я не ел два дня.",
+  ],
+  infected: [
+    "Да... холодно было... очень...",
+    "Я... я не помню как сюда попал...",
+    "В ушах странный звук... вы слышите?",
+    "Почему вы на меня так смотрите?...",
+  ],
+  responses: [
+    "Откуда вы пришли?",
+    "Что случилось на улице?",
+    "Как вы себя чувствуете?",
+    "Вы один были?",
+  ]
+};
 
 const Index = () => {
   const [gameState, setGameState] = useState<GameState>('menu');
@@ -36,10 +60,63 @@ const Index = () => {
   const [survivedDays, setSurvivedDays] = useState(0);
   const [peopleInHouse, setPeopleInHouse] = useState<Person[]>([]);
   const [currentArrival, setCurrentArrival] = useState<Person | null>(null);
-  const [journalEntries, setJournalEntries] = useState<string[]>([
-    'День 1: Начался аномальный холод. Выходить на улицу опасно. Одному оставаться нельзя — гости найдут и убьют.',
-  ]);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [journalEntries, setJournalEntries] = useState<string[]>([]);
   const [aloneWarning, setAloneWarning] = useState(false);
+  const [userMessage, setUserMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState<{sender: string, text: string}[]>([]);
+  const [discoveredTraits, setDiscoveredTraits] = useState<string[]>([]);
+
+  const playSound = (type: 'knock' | 'door' | 'footstep' | 'gunshot' | 'scream') => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      switch(type) {
+        case 'knock':
+          oscillator.frequency.value = 200;
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.1);
+          break;
+        case 'gunshot':
+          oscillator.frequency.value = 100;
+          gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.2);
+          break;
+        case 'scream':
+          oscillator.frequency.value = 400;
+          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.5);
+          break;
+        case 'door':
+          oscillator.frequency.value = 150;
+          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.3);
+          break;
+        case 'footstep':
+          oscillator.frequency.value = 80;
+          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.15);
+          break;
+      }
+    } catch (e) {
+      console.log('Audio not supported');
+    }
+  };
 
   const generatePerson = (): Person => {
     const isInfected = Math.random() > 0.6;
@@ -50,6 +127,9 @@ const Index = () => {
       .slice(0, suspiciousCount)
       .map(t => t.name);
 
+    const dialoguePool = isInfected ? dialogues.infected : dialogues.normal;
+    const selectedDialogue = [...dialoguePool].sort(() => Math.random() - 0.5);
+
     return {
       id: Date.now(),
       name: names[Math.floor(Math.random() * names.length)],
@@ -57,6 +137,8 @@ const Index = () => {
       avatar: '👤',
       suspiciousTraits: selectedTraits,
       wasChecked: false,
+      dialogue: selectedDialogue,
+      currentDialogueIndex: 0,
     };
   };
 
@@ -68,10 +150,14 @@ const Index = () => {
     setCurrentArrival(generatePerson());
     setGameState('arrival');
     setAloneWarning(false);
+    playSound('knock');
   };
 
   const letPersonIn = () => {
     if (!currentArrival) return;
+    
+    playSound('door');
+    setTimeout(() => playSound('footstep'), 300);
     
     setPeopleInHouse(prev => [...prev, currentArrival]);
     setJournalEntries(prev => [...prev, `День ${day}: Впустили ${currentArrival.name} в дом.`]);
@@ -83,47 +169,112 @@ const Index = () => {
   const denyPerson = () => {
     if (!currentArrival) return;
     
+    playSound('door');
     setJournalEntries(prev => [...prev, `День ${day}: Отказали ${currentArrival.name}. Они остались на морозе...`]);
     setCurrentArrival(null);
     setGameState('house');
   };
 
-  const checkPerson = (personId: number) => {
-    const person = peopleInHouse.find(p => p.id === personId);
-    if (!person || person.wasChecked) return;
+  const startInspection = (person: Person) => {
+    setSelectedPerson(person);
+    setChatHistory([]);
+    setDiscoveredTraits([]);
+    setGameState('inspection');
+  };
 
-    setPeopleInHouse(prev => 
-      prev.map(p => p.id === personId ? { ...p, wasChecked: true } : p)
-    );
-
-    if (person.isInfected) {
-      setJournalEntries(prev => [...prev, `День ${day}: ${person.name} был заражён! Начинается приступ безумия...`]);
-      setTimeout(() => {
-        setJournalEntries(prev => [...prev, `День ${day}: Игра окончена. Заражённый убил всех.`]);
-        setGameState('menu');
-      }, 2000);
+  const checkTrait = (traitName: string) => {
+    if (!selectedPerson || discoveredTraits.includes(traitName)) return;
+    
+    playSound('footstep');
+    setDiscoveredTraits(prev => [...prev, traitName]);
+    
+    if (selectedPerson.suspiciousTraits.includes(traitName)) {
+      setChatHistory(prev => [...prev, {
+        sender: 'system',
+        text: `⚠️ Обнаружен признак: ${traitName}`
+      }]);
     } else {
-      setJournalEntries(prev => [...prev, `День ${day}: Проверка ${person.name} — чистый человек.`]);
+      setChatHistory(prev => [...prev, {
+        sender: 'system',
+        text: `✓ ${traitName}: норма`
+      }]);
     }
   };
 
-  const removePerson = (personId: number) => {
-    const person = peopleInHouse.find(p => p.id === personId);
-    if (!person || !person.wasChecked) return;
+  const talkToPerson = () => {
+    if (!selectedPerson) return;
+    
+    setGameState('dialogue');
+    setChatHistory([{
+      sender: selectedPerson.name,
+      text: selectedPerson.dialogue[0]
+    }]);
+  };
 
-    if (person.isInfected) {
-      setPeopleInHouse(prev => prev.filter(p => p.id !== personId));
-      setJournalEntries(prev => [...prev, `День ${day}: Изолировали ${person.name}. Дом в безопасности.`]);
+  const sendMessage = () => {
+    if (!userMessage.trim() || !selectedPerson) return;
+    
+    setChatHistory(prev => [...prev, {
+      sender: 'Вы',
+      text: userMessage
+    }]);
+
+    setTimeout(() => {
+      const nextIndex = selectedPerson.currentDialogueIndex + 1;
+      if (nextIndex < selectedPerson.dialogue.length) {
+        setChatHistory(prev => [...prev, {
+          sender: selectedPerson.name,
+          text: selectedPerson.dialogue[nextIndex]
+        }]);
+        setSelectedPerson({...selectedPerson, currentDialogueIndex: nextIndex});
+      } else {
+        setChatHistory(prev => [...prev, {
+          sender: selectedPerson.name,
+          text: selectedPerson.isInfected 
+            ? "Я... я хочу спать..." 
+            : "Спасибо за помощь. Надеюсь, мы выживем."
+        }]);
+      }
+    }, 1000);
+
+    setUserMessage('');
+  };
+
+  const shootPerson = () => {
+    if (!selectedPerson) return;
+    
+    playSound('gunshot');
+    
+    if (selectedPerson.isInfected) {
+      playSound('scream');
+      setPeopleInHouse(prev => prev.filter(p => p.id !== selectedPerson.id));
+      setJournalEntries(prev => [...prev, `День ${day}: Застрелили ${selectedPerson.name}. Это был заражённый. Правильное решение.`]);
     } else {
-      setJournalEntries(prev => [...prev, `День ${day}: Вы изолировали невинного человека. Он погиб от холода...`]);
-      setPeopleInHouse(prev => prev.filter(p => p.id !== personId));
+      setPeopleInHouse(prev => prev.filter(p => p.id !== selectedPerson.id));
+      setJournalEntries(prev => [...prev, `День ${day}: Застрелили невинного ${selectedPerson.name}... Ошибка.`]);
     }
+    
+    setSelectedPerson(null);
+    setGameState('house');
+  };
+
+  const finishInspection = () => {
+    if (!selectedPerson) return;
+    
+    setPeopleInHouse(prev => 
+      prev.map(p => p.id === selectedPerson.id ? { ...p, wasChecked: true } : p)
+    );
+    
+    setJournalEntries(prev => [...prev, `День ${day}: Проверка ${selectedPerson.name} завершена.`]);
+    setSelectedPerson(null);
+    setGameState('house');
   };
 
   const endDay = () => {
     const uncheckedInfected = peopleInHouse.find(p => p.isInfected && !p.wasChecked);
     
     if (uncheckedInfected) {
+      playSound('scream');
       setJournalEntries(prev => [...prev, `Ночь дня ${day}: ${uncheckedInfected.name} потерял контроль. Паразит взял верх. Все мертвы.`]);
       setTimeout(() => {
         setGameState('menu');
@@ -133,6 +284,7 @@ const Index = () => {
 
     if (peopleInHouse.length === 0) {
       setAloneWarning(true);
+      playSound('scream');
       setJournalEntries(prev => [...prev, `Ночь дня ${day}: Вы остались один. Гости придут и убьют вас...`]);
       setTimeout(() => {
         setJournalEntries(prev => [...prev, `День ${day}: Игра окончена. Гости нашли вас одного.`]);
@@ -146,6 +298,7 @@ const Index = () => {
     setJournalEntries(prev => [...prev, `Ночь дня ${day}: День прошёл. Все живы. Вы не одиноки.`]);
     setCurrentArrival(generatePerson());
     setGameState('arrival');
+    playSound('knock');
   };
 
   return (
@@ -154,11 +307,11 @@ const Index = () => {
         <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-background to-card">
           <div className="text-center space-y-8 animate-fade-in">
             <div className="space-y-4">
-              <h1 className="text-6xl font-bold text-primary animate-flicker">ГОСТИ</h1>
+              <h1 className="text-5xl font-bold text-primary animate-flicker">No, I'm not a human</h1>
               <p className="text-xl text-muted-foreground">Хоррор на выживание</p>
               <p className="text-sm text-muted-foreground max-w-md mx-auto px-4">
                 Паразиты-инопланетяне проникают через уши замёрзших людей. 
-                Впускайте выживших, проверяйте их, но не оставайтесь одни...
+                Общайтесь, проверяйте, выживайте. Но не оставайтесь одни...
               </p>
             </div>
             
@@ -242,7 +395,7 @@ const Index = () => {
                   <h2 className="text-3xl font-bold">Стук в дверь</h2>
                   <div className="text-6xl">{currentArrival.avatar}</div>
                   <h3 className="text-2xl">{currentArrival.name}</h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-muted-foreground italic">
                     "Пустите! На улице смертельный холод! Прошу вас!"
                   </p>
                 </div>
@@ -250,7 +403,7 @@ const Index = () => {
                 <div className="bg-secondary/30 p-4 rounded-lg">
                   <p className="text-sm text-muted-foreground mb-2">
                     <Icon name="Info" className="inline mr-2" size={16} />
-                    Помните: проверить можно только ПОСЛЕ того, как впустите
+                    Проверить можно только ПОСЛЕ того, как впустите
                   </p>
                 </div>
 
@@ -345,54 +498,23 @@ const Index = () => {
                               <div>
                                 <h3 className="font-semibold">{person.name}</h3>
                                 {person.wasChecked && (
-                                  <Badge 
-                                    variant={person.isInfected ? 'destructive' : 'default'}
-                                    className="text-xs"
-                                  >
-                                    {person.isInfected ? 'ЗАРАЖЁН!' : 'Чист'}
+                                  <Badge variant="default" className="text-xs">
+                                    Проверен
                                   </Badge>
                                 )}
                               </div>
                             </div>
                           </div>
 
-                          {person.wasChecked && person.suspiciousTraits.length > 0 && (
-                            <div className="space-y-1">
-                              <p className="text-xs text-muted-foreground">Признаки:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {person.suspiciousTraits.map((trait, idx) => (
-                                  <Badge key={idx} variant="outline" className="text-xs">
-                                    {trait}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="flex gap-2">
-                            {!person.wasChecked && (
-                              <Button 
-                                onClick={() => checkPerson(person.id)}
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                              >
-                                <Icon name="Search" className="mr-1" size={14} />
-                                Проверить
-                              </Button>
-                            )}
-                            {person.wasChecked && (
-                              <Button 
-                                onClick={() => removePerson(person.id)}
-                                size="sm"
-                                variant={person.isInfected ? 'destructive' : 'outline'}
-                                className="flex-1"
-                              >
-                                <Icon name="UserX" className="mr-1" size={14} />
-                                Изолировать
-                              </Button>
-                            )}
-                          </div>
+                          <Button 
+                            onClick={() => startInspection(person)}
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                          >
+                            <Icon name="Search" className="mr-1" size={14} />
+                            {person.wasChecked ? 'Проверить снова' : 'Проверить'}
+                          </Button>
                         </div>
                       </Card>
                     ))}
@@ -407,6 +529,198 @@ const Index = () => {
                   <Icon name="Moon" className="mr-2" size={20} />
                   Закончить день
                 </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'inspection' && selectedPerson && (
+        <div className="min-h-screen p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-between items-center">
+              <Button 
+                variant="outline" 
+                onClick={finishInspection}
+                className="border-2"
+              >
+                <Icon name="ArrowLeft" className="mr-2" size={16} />
+                Вернуться
+              </Button>
+              
+              <h2 className="text-2xl font-bold">Проверка: {selectedPerson.name}</h2>
+
+              <Button 
+                variant="destructive" 
+                onClick={shootPerson}
+                className="border-2"
+              >
+                <Icon name="Skull" className="mr-2" size={16} />
+                Застрелить
+              </Button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card className="p-6 bg-card border-2">
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="text-8xl mb-4">{selectedPerson.avatar}</div>
+                    <h3 className="text-2xl font-bold">{selectedPerson.name}</h3>
+                  </div>
+
+                  <Button 
+                    onClick={talkToPerson}
+                    className="w-full bg-primary"
+                    size="lg"
+                  >
+                    <Icon name="MessageCircle" className="mr-2" size={20} />
+                    Поговорить
+                  </Button>
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-muted-foreground">Физическая проверка:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {guestTraits.slice(0, 6).map((trait) => (
+                        <Button
+                          key={trait.id}
+                          onClick={() => checkTrait(trait.name)}
+                          variant={discoveredTraits.includes(trait.name) ? "secondary" : "outline"}
+                          size="sm"
+                          className="text-xs"
+                          disabled={discoveredTraits.includes(trait.name)}
+                        >
+                          <Icon name={trait.icon as any} className="mr-1" size={12} />
+                          {trait.check}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6 bg-card border-2">
+                <div className="space-y-4">
+                  <h3 className="font-bold flex items-center">
+                    <Icon name="ClipboardList" className="mr-2" size={20} />
+                    Результаты проверки
+                  </h3>
+
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-2">
+                      {chatHistory.map((msg, idx) => (
+                        <div 
+                          key={idx}
+                          className={`p-3 rounded-lg ${
+                            msg.sender === 'system' 
+                              ? 'bg-secondary/50 text-sm' 
+                              : 'bg-primary/10'
+                          }`}
+                        >
+                          <p className="font-semibold text-xs text-muted-foreground">{msg.sender}</p>
+                          <p className="text-sm">{msg.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+
+                  {discoveredTraits.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold">Подозрительные признаки:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {discoveredTraits.filter(t => selectedPerson.suspiciousTraits.includes(t)).map((trait, idx) => (
+                          <Badge key={idx} variant="destructive" className="text-xs">
+                            {trait}
+                          </Badge>
+                        ))}
+                      </div>
+                      {discoveredTraits.filter(t => selectedPerson.suspiciousTraits.includes(t)).length === 0 && (
+                        <p className="text-sm text-muted-foreground">Пока не обнаружено</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'dialogue' && selectedPerson && (
+        <div className="min-h-screen p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-between items-center">
+              <Button 
+                variant="outline" 
+                onClick={() => setGameState('inspection')}
+                className="border-2"
+              >
+                <Icon name="ArrowLeft" className="mr-2" size={16} />
+                К проверке
+              </Button>
+              
+              <h2 className="text-2xl font-bold">Разговор: {selectedPerson.name}</h2>
+              
+              <div className="w-24"></div>
+            </div>
+
+            <Card className="p-6 bg-card border-2">
+              <div className="space-y-4">
+                <div className="text-center mb-4">
+                  <div className="text-6xl mb-2">{selectedPerson.avatar}</div>
+                  <h3 className="text-xl font-bold">{selectedPerson.name}</h3>
+                </div>
+
+                <ScrollArea className="h-[400px] border rounded-lg p-4 bg-secondary/20">
+                  <div className="space-y-3">
+                    {chatHistory.map((msg, idx) => (
+                      <div 
+                        key={idx}
+                        className={`p-3 rounded-lg ${
+                          msg.sender === 'Вы' 
+                            ? 'bg-primary/20 ml-8' 
+                            : 'bg-card mr-8'
+                        }`}
+                      >
+                        <p className="font-semibold text-xs text-muted-foreground mb-1">{msg.sender}</p>
+                        <p className="text-sm">{msg.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                <div className="flex gap-2">
+                  <Textarea
+                    value={userMessage}
+                    onChange={(e) => setUserMessage(e.target.value)}
+                    placeholder="Введите ваш вопрос..."
+                    className="flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                  />
+                  <Button onClick={sendMessage} size="lg">
+                    <Icon name="Send" size={20} />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {dialogues.responses.map((response, idx) => (
+                    <Button
+                      key={idx}
+                      onClick={() => {
+                        setUserMessage(response);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                    >
+                      {response}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </Card>
           </div>
@@ -453,6 +767,9 @@ const Index = () => {
                         <div className="space-y-1">
                           <h3 className="font-semibold">{trait.name}</h3>
                           <p className="text-sm text-muted-foreground">{trait.description}</p>
+                          <Badge variant="outline" className="text-xs mt-1">
+                            {trait.check}
+                          </Badge>
                         </div>
                       </div>
                     </Card>
