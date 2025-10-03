@@ -7,7 +7,7 @@ import Icon from '@/components/ui/icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 
-type GameState = 'menu' | 'arrival' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal';
+type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal';
 
 interface Person {
   id: number;
@@ -34,6 +34,18 @@ const guestTraits = [
 ];
 
 const dialogues = {
+  doorNormal: [
+    "Пожалуйста, впустите! На улице жуткий холод!",
+    "Я с соседней улицы, дом разрушен... Помогите!",
+    "Я замерзаю... Прошу вас, откройте дверь!",
+    "Там все мертвы... Я один выжил...",
+  ],
+  doorInfected: [
+    "Откройте... пожалуйста...",
+    "Холодно... так холодно... впустите...",
+    "Я... я не помню... где я...",
+    "Дверь... откройте дверь... сейчас...",
+  ],
   normal: [
     "Спасибо, что впустили! Там на улице невыносимо холодно...",
     "Я шёл из соседнего района, видел много замёрзших людей.",
@@ -45,6 +57,12 @@ const dialogues = {
     "Я... я не помню как сюда попал...",
     "В ушах странный звук... вы слышите?",
     "Почему вы на меня так смотрите?...",
+  ],
+  doorResponses: [
+    "Кто вы?",
+    "Откуда вы пришли?",
+    "Что случилось?",
+    "Вы один?",
   ],
   responses: [
     "Откуда вы пришли?",
@@ -127,8 +145,9 @@ const Index = () => {
       .slice(0, suspiciousCount)
       .map(t => t.name);
 
-    const dialoguePool = isInfected ? dialogues.infected : dialogues.normal;
-    const selectedDialogue = [...dialoguePool].sort(() => Math.random() - 0.5);
+    const doorDialoguePool = isInfected ? dialogues.doorInfected : dialogues.doorNormal;
+    const insideDialoguePool = isInfected ? dialogues.infected : dialogues.normal;
+    const selectedDialogue = [...doorDialoguePool, ...insideDialoguePool].sort(() => Math.random() - 0.5);
 
     return {
       id: Date.now(),
@@ -153,6 +172,45 @@ const Index = () => {
     playSound('knock');
   };
 
+  const startDoorDialogue = () => {
+    if (!currentArrival) return;
+    setChatHistory([{
+      sender: currentArrival.name,
+      text: currentArrival.dialogue[0]
+    }]);
+    setCurrentArrival({...currentArrival, currentDialogueIndex: 0});
+    setGameState('door-dialogue');
+  };
+
+  const sendDoorMessage = () => {
+    if (!userMessage.trim() || !currentArrival) return;
+    
+    setChatHistory(prev => [...prev, {
+      sender: 'Вы',
+      text: userMessage
+    }]);
+
+    setTimeout(() => {
+      const nextIndex = currentArrival.currentDialogueIndex + 1;
+      if (nextIndex < currentArrival.dialogue.length) {
+        setChatHistory(prev => [...prev, {
+          sender: currentArrival.name,
+          text: currentArrival.dialogue[nextIndex]
+        }]);
+        setCurrentArrival({...currentArrival, currentDialogueIndex: nextIndex});
+      } else {
+        setChatHistory(prev => [...prev, {
+          sender: currentArrival.name,
+          text: currentArrival.isInfected 
+            ? "Пустите... пожалуйста... холодно..." 
+            : "Пожалуйста, откройте дверь! Я замерзаю!"
+        }]);
+      }
+    }, 1000);
+
+    setUserMessage('');
+  };
+
   const letPersonIn = () => {
     if (!currentArrival) return;
     
@@ -162,6 +220,7 @@ const Index = () => {
     setPeopleInHouse(prev => [...prev, currentArrival]);
     setJournalEntries(prev => [...prev, `День ${day}: Впустили ${currentArrival.name} в дом.`]);
     setCurrentArrival(null);
+    setChatHistory([]);
     setGameState('house');
     setAloneWarning(false);
   };
@@ -172,6 +231,7 @@ const Index = () => {
     playSound('door');
     setJournalEntries(prev => [...prev, `День ${day}: Отказали ${currentArrival.name}. Они остались на морозе...`]);
     setCurrentArrival(null);
+    setChatHistory([]);
     setGameState('house');
   };
 
@@ -409,8 +469,17 @@ const Index = () => {
 
                 <div className="flex gap-4">
                   <Button 
-                    onClick={letPersonIn}
+                    onClick={startDoorDialogue}
                     className="flex-1 bg-primary hover:bg-primary/90 border-2 border-primary"
+                    size="lg"
+                  >
+                    <Icon name="MessageCircle" className="mr-2" size={20} />
+                    Поговорить
+                  </Button>
+                  <Button 
+                    onClick={letPersonIn}
+                    variant="outline"
+                    className="flex-1 border-2"
                     size="lg"
                   >
                     <Icon name="DoorOpen" className="mr-2" size={20} />
@@ -641,6 +710,113 @@ const Index = () => {
                 </div>
               </Card>
             </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'door-dialogue' && currentArrival && (
+        <div className="min-h-screen p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-between items-center">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setChatHistory([]);
+                  setGameState('arrival');
+                }}
+                className="border-2"
+              >
+                <Icon name="ArrowLeft" className="mr-2" size={16} />
+                Назад
+              </Button>
+              
+              <h2 className="text-2xl font-bold">Разговор у двери: {currentArrival.name}</h2>
+              
+              <div className="w-24"></div>
+            </div>
+
+            <Card className="p-6 bg-card border-2">
+              <div className="space-y-4">
+                <div className="text-center mb-4">
+                  <Icon name="DoorClosed" className="mx-auto mb-2 text-primary" size={48} />
+                  <div className="text-6xl mb-2">{currentArrival.avatar}</div>
+                  <h3 className="text-xl font-bold">{currentArrival.name}</h3>
+                  <p className="text-sm text-muted-foreground">За дверью</p>
+                </div>
+
+                <ScrollArea className="h-[400px] border rounded-lg p-4 bg-secondary/20">
+                  <div className="space-y-3">
+                    {chatHistory.map((msg, idx) => (
+                      <div 
+                        key={idx}
+                        className={`p-3 rounded-lg ${
+                          msg.sender === 'Вы' 
+                            ? 'bg-primary/20 ml-8' 
+                            : 'bg-card mr-8'
+                        }`}
+                      >
+                        <p className="font-semibold text-xs text-muted-foreground mb-1">{msg.sender}</p>
+                        <p className="text-sm">{msg.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                <div className="flex gap-2">
+                  <Textarea
+                    value={userMessage}
+                    onChange={(e) => setUserMessage(e.target.value)}
+                    placeholder="Спросите что-нибудь через дверь..."
+                    className="flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendDoorMessage();
+                      }
+                    }}
+                  />
+                  <Button onClick={sendDoorMessage} size="lg">
+                    <Icon name="Send" size={20} />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {dialogues.doorResponses.map((response, idx) => (
+                    <Button
+                      key={idx}
+                      onClick={() => {
+                        setUserMessage(response);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                    >
+                      {response}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button 
+                    onClick={letPersonIn}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    size="lg"
+                  >
+                    <Icon name="DoorOpen" className="mr-2" size={20} />
+                    Впустить
+                  </Button>
+                  <Button 
+                    onClick={denyPerson}
+                    variant="destructive"
+                    className="flex-1"
+                    size="lg"
+                  >
+                    <Icon name="DoorClosed" className="mr-2" size={20} />
+                    Отказать
+                  </Button>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       )}
