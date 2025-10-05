@@ -66,69 +66,168 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
     setMadness(prev => Math.min(100, prev + 5));
   };
 
+  const generateSmartReply = (msg: string, npc: Person): { reply: string, suspicion: number } => {
+    const lowerMsg = msg.toLowerCase();
+    const msgLength = msg.length;
+    
+    const nervousWords = ['пожалуйста', 'умоляю', 'помогите', 'замерзаю', 'холодно', 'простите', 'извините'];
+    const strangeWords = ['паразит', 'убить', 'кровь', 'голоса', 'мозг', 'они', 'следят', 'контролируют'];
+    const politeWords = ['здравствуйте', 'добрый', 'спасибо', 'благодарю', 'будьте добры'];
+    const aggressiveWords = ['быстро', 'открывай', 'немедленно', 'сейчас же', 'давай'];
+    const questionWords = ['можно', 'разрешите', 'позвольте', 'могу ли'];
+    
+    const hasNervous = nervousWords.some(w => lowerMsg.includes(w));
+    const hasStrange = strangeWords.some(w => lowerMsg.includes(w));
+    const hasPolite = politeWords.some(w => lowerMsg.includes(w));
+    const hasAggressive = aggressiveWords.some(w => lowerMsg.includes(w));
+    const hasQuestion = questionWords.some(w => lowerMsg.includes(w));
+    const isShort = msgLength < 15;
+    const hasQuestionMark = msg.includes('?');
+    
+    let suspicionAdd = 0;
+    let replyPool: string[] = [];
+    
+    if (hasStrange) {
+      return {
+        reply: Math.random() > 0.5 
+          ? "ЧТО?! Ты о чём вообще?! *хватается за оружие*" 
+          : "Ты... ты заражён! УБИРАЙСЯ ОТСЮДА!",
+        suspicion: 100
+      };
+    }
+    
+    if (npc.suspicion > 80) {
+      replyPool = [
+        `*${npc.name} направляет на тебя дробовик* Последний раз спрашиваю — КТО ТЫ?!`,
+        "Хватит болтать! Ты слишком странный. Уходи, пока жив!",
+        "*щёлкает затвором* Ещё одно неверное слово...",
+        "Я тебя насквозь вижу. Ты не человек. ПОШЁЛ ВОН!"
+      ];
+      suspicionAdd = 15;
+    } else if (npc.suspicion > 60) {
+      if (hasNervous) {
+        replyPool = [
+          "Почему ты так нервничаешь? У нормальных людей руки не трясутся!",
+          "*прищуривается* Умоляешь? Заражённые всегда умоляют...",
+          "Холодно, говоришь? А почему ты весь потный тогда?",
+          "Помогите... помогите... Знаю я эти штучки. Покажи шею!"
+        ];
+        suspicionAdd = 25;
+      } else if (hasAggressive) {
+        replyPool = [
+          "Ты мне приказываешь?! *хватается за биту* Попробуй ещё раз!",
+          "Быстро? БЫСТРО?! Да кто ты такой вообще?!",
+          "*отступает назад* Агрессия — первый признак заражения!"
+        ];
+        suspicionAdd = 30;
+      } else {
+        replyPool = [
+          "*не спускает с тебя глаз* Отвечай чётко — что тебе нужно?",
+          "Стой там, где стоишь. Не. Двигайся.",
+          "*поднимает фонарь к твоему лицу* Дай-ка я посмотрю на твои глаза...",
+          "Руки на виду! И говори медленно."
+        ];
+        suspicionAdd = 15;
+      }
+    } else if (npc.suspicion > 40) {
+      if (hasPolite) {
+        replyPool = [
+          "Вежливый какой... Слишком вежливый. Что-то тут не так.",
+          "Хм. Благодарит меня... *недоверчиво* Ладно, говори дальше.",
+          "*чуть расслабляется* Ну хоть манеры есть. Чего надо?"
+        ];
+        suspicionAdd = 5;
+      } else if (isShort) {
+        replyPool = [
+          "Что 'да'? Что 'нет'? Отвечай нормально!",
+          "*раздражённо* Ты что, говорить разучился?",
+          "Короткие ответы — плохой знак. Объясняй подробнее!"
+        ];
+        suspicionAdd = 15;
+      } else if (hasQuestion) {
+        replyPool = [
+          "Можно... *усмехается* А если я скажу 'нельзя'?",
+          "Спрашиваешь разрешения? Это подозрительно вежливо...",
+          "*качает головой* Сначала ответь на МОИ вопросы."
+        ];
+        suspicionAdd = 10;
+      } else {
+        replyPool = [
+          "Хм... *смотрит с подозрением* И почему я должен тебе верить?",
+          "*скрещивает руки* Продолжай. Я слушаю.",
+          "Звучит странно, но... ладно. Что дальше?"
+        ];
+        suspicionAdd = 8;
+      }
+    } else if (npc.suspicion > 20) {
+      if (hasNervous) {
+        replyPool = [
+          "Эй, успокойся. Почему ты так дёргаешься?",
+          "*нахмурился* Замерзаешь, говоришь? А руки почему трясутся?",
+          "Умоляешь меня? *настораживается* Что ты натворил?"
+        ];
+        suspicionAdd = 12;
+      } else if (hasPolite && hasQuestion) {
+        replyPool = [
+          "*чуть кивает* Ну... спрашиваешь культурно. Слушаю тебя.",
+          `${npc.name} смотрит на тебя внимательно, но без агрессии. — Ладно, говори.`,
+          "*опускает оружие, но держит наготове* Хорошо. Объясняй."
+        ];
+        suspicionAdd = 3;
+      } else {
+        replyPool = [
+          "Понятно... *почесывает затылок* И что мне с этим делать?",
+          "*пожимает плечами* Ну ладно. Продолжай.",
+          "Хм. А почему ты именно в МОЙ дом стучишься?"
+        ];
+        suspicionAdd = 7;
+      }
+    } else {
+      if (hasPolite) {
+        replyPool = [
+          "*расслабленно* О, нормальный человек! Уже редкость. Слушаю.",
+          `${npc.name} улыбается. — Давно не встречал вежливых людей. Заходи.`,
+          "*опускает оружие* Хорошо, хорошо. Рассказывай."
+        ];
+        suspicionAdd = 0;
+      } else if (hasQuestion) {
+        replyPool = [
+          "Можно, конечно... Но сначала скажи — ты не укушен?",
+          "*кивает* Да, но осторожно. Времена сейчас такие...",
+          "Хорошо. Но быстро, ладно? Мне ещё дверь баррикадировать."
+        ];
+        suspicionAdd = 5;
+      } else {
+        replyPool = [
+          "*кивает* Понял. Ладно.",
+          `${npc.name} чешет подбородок. — Интересно. Что ещё?`,
+          "Окей... *смотрит в окно* Это всё?",
+          "Хм. Ну что ж... *расслабленно вздыхает*"
+        ];
+        suspicionAdd = 4;
+      }
+    }
+    
+    if (hasNervous) suspicionAdd += 8;
+    if (hasAggressive) suspicionAdd += 12;
+    if (isShort && !hasQuestion) suspicionAdd += 5;
+    if (!hasQuestionMark && !hasPolite && msgLength > 50) suspicionAdd -= 3;
+    
+    return {
+      reply: replyPool[Math.floor(Math.random() * replyPool.length)],
+      suspicion: Math.max(0, suspicionAdd)
+    };
+  };
+
   const sendMessage = async () => {
     if (!playerMessage.trim() || !currentNPC) return;
     
     setDialogueHistory(prev => [...prev, { role: 'player', text: playerMessage }]);
     setIsAITyping(true);
     
-    let npcReply = '';
-    let suspicionIncrease = 0;
-    
-    try {
-      const response = await fetch('https://functions.poehali.dev/ab7b952b-cde4-4cf2-b791-fdc2a931993d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          npc_name: currentNPC.name,
-          npc_context: `Ты живёшь в доме во время эпидемии паразитов. К тебе пришёл незнакомец. Твой уровень подозрений: ${currentNPC.suspicion}%.`,
-          player_message: playerMessage,
-          suspicion_level: currentNPC.suspicion,
-          madness_level: madness
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        npcReply = data.npc_reply;
-        suspicionIncrease = data.suspicion_increase || 0;
-      } else {
-        throw new Error('API error');
-      }
-      
-    } catch (error) {
-      const nervousWords = ['пожалуйста', 'умоляю', 'помогите', 'замерзаю', 'холодно'];
-      const hasNervous = nervousWords.some(w => playerMessage.toLowerCase().includes(w));
-      
-      const strangeWords = ['паразит', 'убить', 'кровь', 'голоса', 'мозг'];
-      const hasStrange = strangeWords.some(w => playerMessage.toLowerCase().includes(w));
-      
-      if (hasStrange) {
-        npcReply = "ЧТО?! ТЫ ЗАРАЖЁН! *достаёт пистолет*";
-        suspicionIncrease = 100;
-      } else if (currentNPC.suspicion > 70) {
-        npcReply = "Хватит! Ты ведёшь себя слишком странно. Выметайся!";
-        suspicionIncrease = 20;
-      } else if (currentNPC.suspicion > 50) {
-        const replies = [
-          "Что-то ты мне не нравишься... Отвечай прямо!",
-          "Ты точно не заражён? Покажи руки!",
-          "Хм... не верю я тебе.",
-          "Стой где стоишь. Не двигайся."
-        ];
-        npcReply = replies[Math.floor(Math.random() * replies.length)];
-        suspicionIncrease = hasNervous ? 20 : 10;
-      } else {
-        const replies = [
-          "Хм... ладно.",
-          "Понятно. Ну что ж...",
-          "Хорошо, верю тебе.",
-          "Ладно, проходи дальше."
-        ];
-        npcReply = replies[Math.floor(Math.random() * replies.length)];
-        suspicionIncrease = hasNervous ? 15 : 5;
-      }
-    }
+    const aiResponse = generateSmartReply(playerMessage, currentNPC);
+    const npcReply = aiResponse.reply;
+    const suspicionIncrease = aiResponse.suspicion;
     
     setDialogueHistory(prev => [...prev, { role: 'npc', text: npcReply }]);
     setSuspicion(prev => Math.min(100, prev + suspicionIncrease));
