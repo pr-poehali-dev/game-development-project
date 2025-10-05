@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "name": "AI chat with NPC",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "npc_name": "Иван",
+        "npc_context": "Ты охранник дома, подозрительный",
+        "player_message": "Привет, можно войти?",
+        "suspicion_level": 30,
+        "madness_level": 10
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "npc_reply": "string",
+        "suspicion_increase": "number"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
