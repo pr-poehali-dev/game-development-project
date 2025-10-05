@@ -98,6 +98,26 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
       
       if (Math.random() > 0.7) addParasiteMessage();
       
+      if (Math.random() > 0.6) {
+        const checkMessages = [
+          "— Дай-ка я посмотрю на твои руки... *щупает* Холодные какие-то...",
+          "— Ты странно дышишь. Ты точно в порядке?",
+          "— Глаза у тебя какие-то стеклянные... Ты не заражён?",
+          "— Двигаешься как-то резко... Покажись на свету.",
+          "— А ну встань сюда, к зеркалу. Хочу проверить кое-что.",
+          "— Что-то от тебя странно пахнет... Ты точно человек?"
+        ];
+        const checkMsg = checkMessages[Math.floor(Math.random() * checkMessages.length)];
+        setDialogueHistory(prev => [...prev, { role: 'npc', text: checkMsg }]);
+        
+        setHousePeople(prev => prev.map(p => 
+          p.id === currentNPC.id 
+            ? { ...p, suspicion: Math.min(100, p.suspicion + 15) }
+            : p
+        ));
+        setSuspicion(prev => Math.min(100, prev + 15));
+      }
+      
     } catch (error) {
       setDialogueHistory(prev => [...prev, { 
         role: 'npc', 
@@ -376,6 +396,8 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
   if (screen === 'inside') {
     const alivePeople = housePeople.filter(p => p.alive);
     
+    const randomCheck = Math.random() > 0.7;
+    
     return (
       <div className="min-h-screen p-4">
         <div className="max-w-4xl mx-auto space-y-6 pt-8">
@@ -396,6 +418,15 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
               <Icon name="Brain" className="h-5 w-5 text-destructive" />
               <AlertDescription className="text-destructive font-bold">
                 {parasiteMessages[parasiteMessages.length - 1]}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {randomCheck && suspicion > 30 && (
+            <Alert className="border-primary/50 bg-primary/10">
+              <Icon name="Eye" className="h-5 w-5" />
+              <AlertDescription>
+                <strong>Жители дома наблюдают за тобой.</strong> Они замечают странности...
               </AlertDescription>
             </Alert>
           )}
@@ -441,17 +472,6 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
                             className="w-full"
                           >
                             💬 Поговорить
-                          </Button>
-                          <Button 
-                            onClick={() => {
-                              setCurrentNPC(person);
-                              setScreen('check');
-                            }}
-                            size="sm"
-                            variant="secondary"
-                            className="w-full"
-                          >
-                            🔍 Проверить
                           </Button>
                           <Button 
                             onClick={() => {
@@ -575,96 +595,7 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
     );
   }
 
-  if (screen === 'check' && currentNPC) {
-    const checks = [
-      { id: 'movements', name: 'Проверить движения', icon: 'Move', result: 'Движения резкие, угловатые. Неестественные.' },
-      { id: 'breathing', name: 'Послушать дыхание', icon: 'Wind', result: 'Дыхание хриплое, с посторонними звуками.' },
-      { id: 'eyes', name: 'Посмотреть в глаза', icon: 'Eye', result: 'Взгляд стеклянный. Зрачки не реагируют на свет.' },
-      { id: 'temperature', name: 'Проверить руки', icon: 'Thermometer', result: 'Кожа холодная. Слишком холодная.' },
-      { id: 'emotions', name: 'Задать вопрос', icon: 'UserX', result: 'Ответ механический. Эмоций нет.' },
-      { id: 'mirror', name: 'Проверить зеркалом', icon: 'Mirror', result: 'Отражение... нечёткое. Размытое.' }
-    ];
 
-    return (
-      <div className="min-h-screen p-4">
-        <div className="max-w-4xl mx-auto space-y-6 pt-8">
-          <div className="flex justify-between items-center">
-            <Button 
-              variant="outline" 
-              onClick={() => setScreen('inside')}
-            >
-              <Icon name="ArrowLeft" className="mr-2" size={16} />
-              Назад
-            </Button>
-            <Badge variant="destructive" className="text-lg px-4 py-2">
-              🧠 {madness}%
-            </Badge>
-          </div>
-
-          <Card className="p-8">
-            <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <div className="text-6xl">{currentNPC.avatar}</div>
-                <h2 className="text-2xl font-bold">Проверка: {currentNPC.name}</h2>
-              </div>
-
-              <Alert className="border-destructive/50">
-                <Icon name="AlertTriangle" className="h-4 w-4" />
-                <AlertDescription>
-                  Каждая проверка увеличивает подозрения на 10%
-                </AlertDescription>
-              </Alert>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {checks.map(check => {
-                  const used = checksUsed.includes(check.id);
-                  return (
-                    <Card 
-                      key={check.id}
-                      className={`p-4 ${used ? 'bg-secondary/30' : 'hover:border-primary cursor-pointer'}`}
-                      onClick={() => {
-                        if (!used) {
-                          setChecksUsed(prev => [...prev, check.id]);
-                          setHousePeople(prev => prev.map(p => 
-                            p.id === currentNPC.id 
-                              ? { ...p, suspicion: Math.min(100, p.suspicion + 10) }
-                              : p
-                          ));
-                          playSound('click');
-                          addParasiteMessage();
-                        }
-                      }}
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Icon name={check.icon as any} size={24} />
-                          <h3 className="font-bold">{check.name}</h3>
-                        </div>
-                        {used && (
-                          <p className="text-sm text-muted-foreground italic">
-                            {check.result}
-                          </p>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              {checksUsed.length >= 3 && (
-                <Alert className="border-destructive bg-destructive/20">
-                  <Icon name="Skull" className="h-4 w-4" />
-                  <AlertDescription className="text-destructive font-bold">
-                    Ты — монстр. Они все это заметили.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   if (screen === 'ending') {
     if (endingType === 'killed-all') {
