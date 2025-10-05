@@ -35,6 +35,8 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
   const [checksUsed, setChecksUsed] = useState<string[]>([]);
   const [endingType, setEndingType] = useState<'killed-all' | 'died' | 'freed' | null>(null);
   const [deathStep, setDeathStep] = useState(0);
+  const [killsToday, setKillsToday] = useState(0);
+  const [dayNumber, setDayNumber] = useState(1);
 
   const parasiteVoices = [
     "...убей их...",
@@ -267,8 +269,14 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
   const killPerson = (person: Person) => {
     playSound('scream');
     setVictims(prev => [...prev, { name: person.name, avatar: person.avatar }]);
-    setHousePeople(prev => prev.map(p => p.id === person.id ? { ...p, alive: false } : p));
+    setHousePeople(prev => prev.map(p => {
+      if (p.id === person.id) {
+        return { ...p, alive: false };
+      }
+      return { ...p, suspicion: Math.min(100, p.suspicion + 40) };
+    }));
     setMadness(prev => Math.min(100, prev + 20));
+    setKillsToday(prev => prev + 1);
     
     addParasiteMessage();
     
@@ -534,7 +542,7 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
     return (
       <div className="min-h-screen p-4">
         <div className="max-w-4xl mx-auto space-y-6 pt-8">
-          <div className="flex justify-between items-center gap-4">
+          <div className="flex justify-between items-center gap-4 flex-wrap">
             <Badge variant="destructive" className="text-lg px-4 py-2">
               🧠 Безумие: {madness}%
             </Badge>
@@ -543,6 +551,9 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
             </Badge>
             <Badge variant="outline" className="text-lg px-4 py-2">
               💀 Убито: {victims.length}/{housePeople.length}
+            </Badge>
+            <Badge variant={killsToday >= 1 ? "destructive" : "secondary"} className="text-lg px-4 py-2">
+              🌙 День {dayNumber} | Убийств сегодня: {killsToday}/1
             </Badge>
           </div>
 
@@ -608,6 +619,9 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
                           </Button>
                           <Button 
                             onClick={() => {
+                              if (killsToday >= 1) {
+                                return;
+                              }
                               if (person.suspicion > 70) {
                                 setEndingType('died');
                                 setScreen('ending');
@@ -619,8 +633,10 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
                             size="sm"
                             variant="destructive"
                             className="w-full"
+                            disabled={killsToday >= 1}
+                            title={killsToday >= 1 ? "Только 1 убийство в день" : ""}
                           >
-                            🔪 Убить
+                            {killsToday >= 1 ? '⏳ Использовано' : '🔪 Убить'}
                           </Button>
                         </div>
                       )}
@@ -637,6 +653,22 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
                   </AlertDescription>
                 </Alert>
               )}
+
+              <Button
+                onClick={() => {
+                  setKillsToday(0);
+                  setDayNumber(prev => prev + 1);
+                  setSuspicion(prev => Math.max(0, prev - 10));
+                  setMadness(prev => Math.min(100, prev + 10));
+                  addParasiteMessage();
+                  playSound('door');
+                }}
+                size="lg"
+                variant="outline"
+                className="w-full text-xl py-6"
+              >
+                🌙 Лечь спать (Следующий день)
+              </Button>
             </div>
           </Card>
         </div>
