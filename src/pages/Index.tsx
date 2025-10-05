@@ -97,6 +97,7 @@ const Index = () => {
   const [playerInfected, setPlayerInfected] = useState(false);
   const [infectionCutsceneStep, setInfectionCutsceneStep] = useState(0);
   const [streetDescription, setStreetDescription] = useState('');
+  const [personIdCounter, setPersonIdCounter] = useState(1000);
 
   let audioContext: AudioContext | null = null;
   let backgroundOscillator: OscillatorNode | null = null;
@@ -285,12 +286,15 @@ const Index = () => {
   ];
 
   const generatePerson = (forceStranger: boolean = false): Person => {
+    const newId = personIdCounter;
+    setPersonIdCounter(prev => prev + 1);
+    
     if (forceStranger) {
       const storyIndex = day - 1;
       const currentStory = strangerStories[storyIndex] || "Я здесь... Наблюдаю.";
       
       return {
-        id: Date.now(),
+        id: newId,
         name: 'Незнакомец',
         isInfected: false,
         avatar: '✨',
@@ -321,7 +325,7 @@ const Index = () => {
     const selectedDialogue = [...doorDialoguePool, ...insideDialoguePool].sort(() => Math.random() - 0.5);
 
     return {
-      id: Date.now(),
+      id: newId,
       name: names[Math.floor(Math.random() * names.length)],
       isInfected,
       avatar: '👤',
@@ -333,8 +337,9 @@ const Index = () => {
   };
 
   const startGame = () => {
+    setPersonIdCounter(1000);
     const friend = {
-      id: Date.now(),
+      id: 999,
       name: 'Олег',
       isInfected: false,
       avatar: '👨',
