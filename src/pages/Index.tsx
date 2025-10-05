@@ -107,6 +107,8 @@ const Index = () => {
   const [personIdCounter, setPersonIdCounter] = useState(1000);
   const [corpses, setCorpses] = useState<Corpse[]>([]);
   const [nakedGuestKilled, setNakedGuestKilled] = useState(false);
+  const [energy, setEnergy] = useState(3);
+  const [checksCompleted, setChecksCompleted] = useState(0);
 
   let audioContext: AudioContext | null = null;
   let backgroundOscillator: OscillatorNode | null = null;
@@ -349,6 +351,8 @@ const Index = () => {
     setPersonIdCounter(1000);
     setCorpses([]);
     setNakedGuestKilled(false);
+    setEnergy(3);
+    setChecksCompleted(0);
     const friend = {
       id: 999,
       name: 'Олег',
@@ -357,11 +361,12 @@ const Index = () => {
       suspiciousTraits: [],
       wasChecked: true,
       dialogue: [
-        "Помнишь, как твой брат познакомил нас? Хорошие были времена...",
-        "До аномалии я работал инженером. Теперь это не важно.",
-        "Я остался у тебя ночевать как раз когда началось это дерьмо.",
-        "Твой брат... Я не знаю, где он сейчас. Надеюсь, он в безопасности.",
-        "Мы выживем. Я верю в это."
+        "Слушай, проверка людей — это трудно. Нужно присматриваться внимательно.",
+        "У тебя есть только 3 единицы энергии в день. Каждая полная проверка человека забирает 1 энергию.",
+        "Не всех можно проверить за день. Выбирай самых подозрительных.",
+        "Когда энергия закончится — день сразу закончится. Будь осторожен.",
+        "Я остался у тебя ночевать когда началось это дерьмо. Брат... надеюсь он жив.",
+        "Мы выживем. Главное — быть внимательным."
       ],
       currentDialogueIndex: 0,
       isStranger: true,
@@ -624,9 +629,20 @@ const Index = () => {
       prev.map(p => p.id === selectedPerson.id ? { ...p, wasChecked: true } : p)
     );
     
-    setJournalEntries(prev => [...prev, `День ${day}: Проверка ${selectedPerson.name} завершена.`]);
+    const newEnergy = energy - 1;
+    setEnergy(newEnergy);
+    setChecksCompleted(prev => prev + 1);
+    setJournalEntries(prev => [...prev, `День ${day}: Проверка ${selectedPerson.name} завершена. Осталось энергии: ${newEnergy}/3`]);
     setSelectedPerson(null);
-    setGameState('house');
+    
+    if (newEnergy <= 0) {
+      setJournalEntries(prev => [...prev, `День ${day}: Энергия закончилась. День автоматически завершён.`]);
+      setTimeout(() => {
+        endDay();
+      }, 1500);
+    } else {
+      setGameState('house');
+    }
   };
 
   const lookOutWindow = () => {
@@ -698,6 +714,9 @@ const Index = () => {
       playSound('scream');
       return;
     }
+    
+    setEnergy(3);
+    setChecksCompleted(0);
     
     if (!nakedGuestKilled) {
       const hasStranger = peopleInHouse.some(p => p.isStranger);
@@ -912,9 +931,14 @@ const Index = () => {
                     <Icon name="Home" className="inline mr-2" size={24} />
                     В доме
                   </h2>
-                  <Badge variant="outline">
-                    Людей: {peopleInHouse.length}
-                  </Badge>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">
+                      Людей: {peopleInHouse.length}
+                    </Badge>
+                    <Badge variant={energy > 0 ? "default" : "destructive"}>
+                      ⚡ Энергия: {energy}/3
+                    </Badge>
+                  </div>
                 </div>
 
                 {peopleInHouse.length === 0 ? (
