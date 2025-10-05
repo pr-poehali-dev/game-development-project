@@ -7,7 +7,7 @@ import Icon from '@/components/ui/icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 
-type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone' | 'player-infected' | 'self-check';
+type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone' | 'player-infected' | 'self-check' | 'tv';
 
 interface Person {
   id: number;
@@ -99,12 +99,44 @@ const Index = () => {
   const [streetDescription, setStreetDescription] = useState('');
 
   let audioContext: AudioContext | null = null;
+  let backgroundOscillator: OscillatorNode | null = null;
 
   const getAudioContext = () => {
     if (!audioContext) {
       audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
     return audioContext;
+  };
+
+  const startBackgroundMusic = () => {
+    if (backgroundOscillator) return;
+    try {
+      const ctx = getAudioContext();
+      backgroundOscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      backgroundOscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      backgroundOscillator.type = 'sine';
+      backgroundOscillator.frequency.value = 30;
+      gainNode.gain.setValueAtTime(0.02, ctx.currentTime);
+      
+      backgroundOscillator.start();
+    } catch (e) {
+      console.log('Background music not supported');
+    }
+  };
+
+  const stopBackgroundMusic = () => {
+    if (backgroundOscillator) {
+      try {
+        backgroundOscillator.stop();
+        backgroundOscillator = null;
+      } catch (e) {
+        console.log('Stop music error');
+      }
+    }
   };
 
   const playSound = (type: 'knock' | 'door' | 'footstep' | 'gunshot' | 'scream' | 'click' | 'tension' | 'ambient') => {
@@ -204,9 +236,20 @@ const Index = () => {
   const deathDialogue = [
     "Ты умер.",
     "Но смерть — это не конец.",
-    "Это лишь начало вечного одиночества.",
-    "Теперь ты будешь здесь... Один... Навсегда.",
+    "Это освобождение.",
+    "Ты обрёл покой.",
+    "Больше нет боли. Нет страха.",
     "Добро пожаловать домой."
+  ];
+
+  const tvNews = [
+    "📺 СРОЧНО: Аномальный холод охватил весь регион. Температура -50°C.",
+    "📺 Власти рекомендуют не выходить на улицу. Случаи обморожения участились.",
+    "📺 Учёные обнаружили неизвестный паразитический организм в телах замёрзших.",
+    "📺 ВНИМАНИЕ: Паразит проникает через уши и берёт контроль над мозгом.",
+    "📺 Зафиксированы случаи агрессии у заражённых. Избегайте контакта.",
+    "📺 Карантин объявлен по всему городу. Военные патрулируют улицы.",
+    "📺 День 7: Связь с соседними городами потеряна. Мы одни.",
   ];
 
   const infectionCutscene = [
@@ -280,16 +323,21 @@ const Index = () => {
   };
 
   const startGame = () => {
-    setPeopleInHouse([]);
+    const firstPerson = generatePerson(true);
+    setPeopleInHouse([firstPerson]);
     setDay(1);
     setSurvivedDays(0);
     setInnocentKills(0);
     setPlayerInfected(false);
     setInfectionCutsceneStep(0);
-    setJournalEntries(['День 1: Начался аномальный холод. Выходить на улицу опасно. Одному оставаться нельзя — гости найдут и убьют.']);
-    setCurrentArrival(generatePerson(true));
+    setJournalEntries([
+      'День 1: Начался аномальный холод. Выходить на улицу опасно.',
+      'День 1: Незнакомец пришёл первым. Я впустил его — одному оставаться нельзя.'
+    ]);
+    setCurrentArrival(generatePerson());
     setGameState('arrival');
     setAloneWarning(false);
+    startBackgroundMusic();
     playSound('knock');
   };
 
@@ -839,7 +887,7 @@ const Index = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <Button 
                     onClick={lookOutWindow}
                     variant="outline"
@@ -857,7 +905,22 @@ const Index = () => {
                     size="lg"
                   >
                     <Icon name="User" className="mr-2" size={20} />
-                    Проверить себя
+                    Себя
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Button 
+                    onClick={() => {
+                      playSound('click');
+                      setGameState('tv');
+                    }}
+                    variant="outline"
+                    className="border-2"
+                    size="lg"
+                  >
+                    <Icon name="Tv" className="mr-2" size={20} />
+                    Телевизор
                   </Button>
                   
                   <Button 
@@ -866,7 +929,7 @@ const Index = () => {
                     size="lg"
                   >
                     <Icon name="Moon" className="mr-2" size={20} />
-                    Закончить день
+                    День
                   </Button>
                 </div>
               </div>
@@ -1327,11 +1390,17 @@ const Index = () => {
           <div className="max-w-4xl mx-auto space-y-6 pt-20">
             <Card className="p-8 bg-destructive/20 border-4 border-destructive">
               <div className="space-y-6 text-center">
-                <div className="text-9xl animate-shake">👹</div>
-                <h2 className="text-4xl font-bold text-destructive animate-flicker">ГОЛЫЙ ГОСТЬ!</h2>
+                <div className="relative">
+                  <img 
+                    src="https://cdn.poehali.dev/files/d835ed1c-256a-4e6d-a355-0f19b135a5d8.jpg" 
+                    alt="Голый Гость"
+                    className="w-full max-w-md mx-auto rounded-lg border-4 border-cyan-500 animate-pulse-danger"
+                  />
+                </div>
+                <h2 className="text-4xl font-bold text-cyan-400 animate-flicker">ГОЛЫЙ ГОСТЬ!</h2>
                 <div className="bg-black/70 p-6 rounded-lg space-y-4">
                   {nakedGuestWarnings.map((warning, idx) => (
-                    <p key={idx} className="text-2xl text-destructive font-bold animate-pulse-danger">
+                    <p key={idx} className="text-2xl text-cyan-300 font-bold animate-pulse-danger">
                       "{warning}"
                     </p>
                   ))}
@@ -1342,7 +1411,10 @@ const Index = () => {
                   )}
                 </div>
                 <Button 
-                  onClick={continueAfterNakedGuest}
+                  onClick={() => {
+                    continueAfterNakedGuest();
+                    playSound('tension');
+                  }}
                   className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   size="lg"
                 >
@@ -1380,22 +1452,39 @@ const Index = () => {
       )}
 
       {gameState === 'alone' && (
-        <div className="min-h-screen p-4 bg-gradient-to-b from-black to-gray-900">
+        <div className="min-h-screen p-4 bg-gradient-to-b from-green-900 to-green-700">
           <div className="max-w-4xl mx-auto flex items-center justify-center min-h-screen">
-            <Card className="p-12 bg-card/50 border-2">
+            <Card className="p-12 bg-green-100 border-4 border-green-300">
               <div className="space-y-8 text-center">
-                <div className="text-8xl">🏠</div>
-                <h2 className="text-3xl font-bold">Ты один в своём доме</h2>
-                <p className="text-xl text-muted-foreground">
-                  Тишина. Покой. Никого вокруг.
-                </p>
-                <p className="text-lg text-muted-foreground">
-                  Всё хорошо... Навсегда...
-                </p>
+                <div className="text-8xl">🏡</div>
+                <h2 className="text-4xl font-bold text-green-900">Покой</h2>
+                <div className="space-y-4 text-green-800">
+                  <p className="text-2xl">
+                    Ты в своём доме
+                  </p>
+                  <p className="text-xl">
+                    Вокруг зелёный луг. Тепло. Светло.
+                  </p>
+                  <p className="text-xl">
+                    Птицы поют. Ветер шепчет в траве.
+                  </p>
+                  <p className="text-2xl font-bold">
+                    Ты обрёл покой.
+                  </p>
+                  <p className="text-lg italic">
+                    Больше нет холода. Нет страха.
+                  </p>
+                  <p className="text-lg">
+                    Здесь тихо и спокойно...
+                  </p>
+                  <p className="text-xl font-semibold">
+                    Навсегда.
+                  </p>
+                </div>
                 <div className="pt-8">
                   <Button 
                     onClick={() => setGameState('menu')}
-                    className="bg-primary hover:bg-primary/90"
+                    className="bg-green-600 hover:bg-green-700 text-white"
                     size="lg"
                   >
                     Вернуться в меню
@@ -1490,6 +1579,56 @@ const Index = () => {
                 >
                   {infectionCutsceneStep < infectionCutscene.length - 1 ? '...' : 'Конец'}
                 </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'tv' && (
+        <div className="min-h-screen p-4 bg-black">
+          <div className="max-w-4xl mx-auto space-y-6 pt-20">
+            <Card className="p-8 bg-gray-900 border-4 border-gray-700">
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-3xl font-bold text-gray-300">
+                    <Icon name="Tv" className="inline mr-2" size={32} />
+                    Телевизор
+                  </h2>
+                  <Button 
+                    onClick={() => {
+                      setGameState('house');
+                      playSound('click');
+                    }}
+                    variant="outline"
+                  >
+                    Выключить
+                  </Button>
+                </div>
+
+                <div className="bg-black p-6 rounded-lg border-4 border-blue-500">
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold text-blue-400 mb-4">📡 ЭКСТРЕННЫЕ НОВОСТИ</h3>
+                    </div>
+                    
+                    {tvNews.slice(0, Math.min(day, tvNews.length)).map((news, idx) => (
+                      <div key={idx} className="border-l-4 border-red-500 pl-4 py-2">
+                        <p className="text-lg text-gray-300">{news}</p>
+                      </div>
+                    ))}
+
+                    <div className="mt-6 p-4 bg-red-900/50 border-2 border-red-500 rounded">
+                      <p className="text-xl text-red-300 font-bold text-center animate-pulse">
+                        ⚠️ ОСТАВАЙТЕСЬ ДОМА. НЕ ДОВЕРЯЙТЕ НЕЗНАКОМЦАМ. ⚠️
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-center text-gray-500 text-sm">
+                  День {day} • Трансляция от Центра по контролю аномалий
+                </div>
               </div>
             </Card>
           </div>
