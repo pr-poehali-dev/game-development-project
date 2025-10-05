@@ -22,6 +22,13 @@ interface Person {
   strangerStory?: string;
 }
 
+interface Corpse {
+  id: number;
+  name: string;
+  type: 'naked-guest' | 'body-bag';
+  avatar: string;
+}
+
 const guestTraits = [
   { id: 1, name: 'Необычные движения', icon: 'Move', description: 'Резкие, угловатые движения после заражения паразитом', check: 'Проверить движения' },
   { id: 2, name: 'Странное дыхание', icon: 'Wind', description: 'Паразит влияет на дыхательные функции', check: 'Послушать дыхание' },
@@ -98,6 +105,8 @@ const Index = () => {
   const [infectionCutsceneStep, setInfectionCutsceneStep] = useState(0);
   const [streetDescription, setStreetDescription] = useState('');
   const [personIdCounter, setPersonIdCounter] = useState(1000);
+  const [corpses, setCorpses] = useState<Corpse[]>([]);
+  const [nakedGuestKilled, setNakedGuestKilled] = useState(false);
 
   let audioContext: AudioContext | null = null;
   let backgroundOscillator: OscillatorNode | null = null;
@@ -338,6 +347,8 @@ const Index = () => {
 
   const startGame = () => {
     setPersonIdCounter(1000);
+    setCorpses([]);
+    setNakedGuestKilled(false);
     const friend = {
       id: 999,
       name: 'Олег',
@@ -437,6 +448,26 @@ const Index = () => {
       setTimeout(() => playSound('scream'), 500);
     }
     setJournalEntries(prev => [...prev, `День ${day}: Отказали ${currentArrival.name}. Они остались на морозе...`]);
+    
+    if (peopleInHouse.length >= 2) {
+      const victims = peopleInHouse.filter(p => !p.isStranger);
+      if (victims.length > 0) {
+        const randomVictim = victims[Math.floor(Math.random() * victims.length)];
+        setTimeout(() => {
+          playSound('scream');
+          playSound('door');
+          setPeopleInHouse(prev => prev.filter(p => p.id !== randomVictim.id));
+          setCorpses(prev => [...prev, {
+            id: randomVictim.id,
+            name: randomVictim.name,
+            type: 'naked-guest',
+            avatar: '💀'
+          }]);
+          setJournalEntries(prev => [...prev, `День ${day}: Голый Гость ворвался в дом! ${randomVictim.name} убит! Тело обезображено...`]);
+        }, 2000);
+      }
+    }
+    
     setCurrentArrival(null);
     setChatHistory([]);
     setGameState('house');
@@ -550,11 +581,23 @@ const Index = () => {
     if (selectedPerson.isInfected) {
       setTimeout(() => playSound('scream'), 200);
       setPeopleInHouse(prev => prev.filter(p => p.id !== selectedPerson.id));
-      setJournalEntries(prev => [...prev, `День ${day}: Застрелили ${selectedPerson.name}. Это был заражённый. Правильное решение.`]);
+      setCorpses(prev => [...prev, {
+        id: selectedPerson.id,
+        name: selectedPerson.name,
+        type: 'body-bag',
+        avatar: '🎒'
+      }]);
+      setJournalEntries(prev => [...prev, `День ${day}: Застрелили ${selectedPerson.name}. Это был заражённый. Тело упаковано в мешок.`]);
     } else {
       setTimeout(() => playSound('scream'), 200);
       setPeopleInHouse(prev => prev.filter(p => p.id !== selectedPerson.id));
-      setJournalEntries(prev => [...prev, `День ${day}: Застрелили невинного ${selectedPerson.name}... Ошибка.`]);
+      setCorpses(prev => [...prev, {
+        id: selectedPerson.id,
+        name: selectedPerson.name,
+        type: 'body-bag',
+        avatar: '🎒'
+      }]);
+      setJournalEntries(prev => [...prev, `День ${day}: Застрелили невинного ${selectedPerson.name}... Ошибка. Тело упаковано.`]);
       
       const newKillCount = innocentKills + 1;
       setInnocentKills(newKillCount);
@@ -656,10 +699,18 @@ const Index = () => {
       return;
     }
     
-    const hasStranger = peopleInHouse.some(p => p.isStranger);
-    setCurrentArrival(hasStranger ? generatePerson() : (day <= 7 && Math.random() > 0.5 ? generatePerson(true) : generatePerson()));
-    setGameState('arrival');
-    setTimeout(() => playSound('knock'), 500);
+    if (!nakedGuestKilled) {
+      const hasStranger = peopleInHouse.some(p => p.isStranger);
+      setCurrentArrival(hasStranger ? generatePerson() : (day <= 7 && Math.random() > 0.5 ? generatePerson(true) : generatePerson()));
+      setGameState('arrival');
+      setTimeout(() => playSound('knock'), 500);
+    } else {
+      setNakedGuestKilled(false);
+      const hasStranger = peopleInHouse.some(p => p.isStranger);
+      setCurrentArrival(hasStranger ? generatePerson() : (day <= 7 && Math.random() > 0.5 ? generatePerson(true) : generatePerson()));
+      setGameState('arrival');
+      setTimeout(() => playSound('knock'), 500);
+    }
   };
 
   const continueDeathDialogue = () => {
@@ -908,6 +959,30 @@ const Index = () => {
                         </div>
                       </Card>
                     ))}
+                  </div>
+                )}
+
+                {corpses.length > 0 && (
+                  <div className="space-y-3 pt-4 border-t-2 border-destructive/30">
+                    <h3 className="text-lg font-semibold text-destructive flex items-center gap-2">
+                      <Icon name="Skull" size={20} />
+                      Трупы ({corpses.length})
+                    </h3>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {corpses.map((corpse) => (
+                        <Card key={corpse.id} className="p-3 bg-destructive/10 border-destructive/50">
+                          <div className="flex items-center gap-3">
+                            <div className="text-3xl">{corpse.avatar}</div>
+                            <div>
+                              <p className="font-semibold text-sm">{corpse.name}</p>
+                              <Badge variant="destructive" className="text-xs mt-1">
+                                {corpse.type === 'body-bag' ? 'Мешок с телом' : 'Обезображен'}
+                              </Badge>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
                 )}
 
