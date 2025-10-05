@@ -7,7 +7,7 @@ import Icon from '@/components/ui/icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 
-type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone';
+type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone' | 'player-infected' | 'self-check';
 
 interface Person {
   id: number;
@@ -37,28 +37,33 @@ const guestTraits = [
 
 const dialogues = {
   doorNormal: [
-    "Пожалуйста, впустите! На улице жуткий холод!",
-    "Я с соседней улицы, дом разрушен... Помогите!",
-    "Я замерзаю... Прошу вас, откройте дверь!",
-    "Там все мертвы... Я один выжил...",
+    "Пожалуйста, впустите! На улице жуткий холод, блять!",
+    "Я с соседней улицы, дом разрушен... Помогите, ёб твою мать!",
+    "Я замерзаю, сука... Прошу вас, откройте дверь!",
+    "Там все мертвы... Я один выжил, блядь...",
+    "Какого хуя вы медлите?! Впустите меня!",
+    "Я не паразит, чёрт возьми! Откройте уже!",
   ],
   doorInfected: [
     "Откройте... пожалуйста...",
     "Холодно... так холодно... впустите...",
     "Я... я не помню... где я...",
     "Дверь... откройте дверь... сейчас...",
+    "Пустите... ко мне... в голову... голоса...",
   ],
   normal: [
-    "Спасибо, что впустили! Там на улице невыносимо холодно...",
-    "Я шёл из соседнего района, видел много замёрзших людей.",
-    "Как вы думаете, когда закончится этот кошмар?",
-    "У вас есть что-нибудь поесть? Я не ел два дня.",
+    "Спасибо, что впустили! Там пиздец какой холод...",
+    "Я шёл из соседнего района, видел охуеть сколько замёрзших.",
+    "Как вы думаете, когда закончится эта ёбаная жесть?",
+    "У вас есть что пожрать? Я два дня нихуя не ел.",
+    "Там снаружи реально страшно, бля...",
   ],
   infected: [
     "Да... холодно было... очень...",
     "Я... я не помню как сюда попал...",
     "В ушах странный звук... вы слышите?",
     "Почему вы на меня так смотрите?...",
+    "Мне... нужно... поспать... сейчас...",
   ],
   doorResponses: [
     "Кто вы?",
@@ -88,6 +93,10 @@ const Index = () => {
   const [discoveredTraits, setDiscoveredTraits] = useState<string[]>([]);
   const [nakedGuestWarnings, setNakedGuestWarnings] = useState<string[]>([]);
   const [deathDialogueIndex, setDeathDialogueIndex] = useState(0);
+  const [innocentKills, setInnocentKills] = useState(0);
+  const [playerInfected, setPlayerInfected] = useState(false);
+  const [infectionCutsceneStep, setInfectionCutsceneStep] = useState(0);
+  const [streetDescription, setStreetDescription] = useState('');
 
   let audioContext: AudioContext | null = null;
 
@@ -98,7 +107,7 @@ const Index = () => {
     return audioContext;
   };
 
-  const playSound = (type: 'knock' | 'door' | 'footstep' | 'gunshot' | 'scream' | 'click') => {
+  const playSound = (type: 'knock' | 'door' | 'footstep' | 'gunshot' | 'scream' | 'click' | 'tension' | 'ambient') => {
     try {
       const ctx = getAudioContext();
       const oscillator = ctx.createOscillator();
@@ -150,6 +159,22 @@ const Index = () => {
           oscillator.start();
           oscillator.stop(ctx.currentTime + 0.05);
           break;
+        case 'tension':
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 50;
+          gainNode.gain.setValueAtTime(0.05, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 2);
+          oscillator.frequency.linearRampToValueAtTime(150, ctx.currentTime + 2);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 2);
+          break;
+        case 'ambient':
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 40;
+          gainNode.gain.setValueAtTime(0.03, ctx.currentTime);
+          oscillator.start();
+          oscillator.stop(ctx.currentTime + 5);
+          break;
       }
     } catch (e) {
       console.log('Audio not supported');
@@ -182,6 +207,28 @@ const Index = () => {
     "Это лишь начало вечного одиночества.",
     "Теперь ты будешь здесь... Один... Навсегда.",
     "Добро пожаловать домой."
+  ];
+
+  const infectionCutscene = [
+    "Ты убил двух невинных людей...",
+    "Паразит начинает проникать в твой разум...",
+    "Ты чувствуешь холод... внутри...",
+    "Твои руки... они двигаются сами по себе...",
+    "ТЫ БОЛЬШЕ НЕ КОНТРОЛИРУЕШЬ СЕБЯ",
+    "*КРИКИ И ЗВУКИ БОРЬБЫ*",
+    "Все мертвы. Ты убил их всех.",
+    "Теперь ты один из НИХ."
+  ];
+
+  const streetDescriptions = [
+    "Пустая заснеженная улица. Ветер воет между домов. Ни души...",
+    "Вдали виднеется тень человека. Он стоит неподвижно и смотрит на твой дом.",
+    "Несколько замёрзших тел лежат прямо на дороге. Один из них шевелится...",
+    "Группа людей быстро бежит мимо. Они не оглядываются. За ними кто-то гонится.",
+    "Голый Гость стоит напротив и смотрит прямо в окно. Он улыбается.",
+    "Кто-то стучится в окно соседнего дома. Изнутри никто не отвечает.",
+    "Стая воронов кружит над телами. Они что-то клюют.",
+    "Человек ползёт по снегу, оставляя кровавый след. Он тянет руку к твоему дому.",
   ];
 
   const generatePerson = (forceStranger: boolean = false): Person => {
@@ -236,6 +283,9 @@ const Index = () => {
     setPeopleInHouse([]);
     setDay(1);
     setSurvivedDays(0);
+    setInnocentKills(0);
+    setPlayerInfected(false);
+    setInfectionCutsceneStep(0);
     setJournalEntries(['День 1: Начался аномальный холод. Выходить на улицу опасно. Одному оставаться нельзя — гости найдут и убьют.']);
     setCurrentArrival(generatePerson(true));
     setGameState('arrival');
@@ -425,6 +475,19 @@ const Index = () => {
       setTimeout(() => playSound('scream'), 200);
       setPeopleInHouse(prev => prev.filter(p => p.id !== selectedPerson.id));
       setJournalEntries(prev => [...prev, `День ${day}: Застрелили невинного ${selectedPerson.name}... Ошибка.`]);
+      
+      const newKillCount = innocentKills + 1;
+      setInnocentKills(newKillCount);
+      
+      if (newKillCount >= 2) {
+        setPlayerInfected(true);
+        setInfectionCutsceneStep(0);
+        setTimeout(() => {
+          setGameState('player-infected');
+          playSound('scream');
+        }, 1500);
+        return;
+      }
     }
     
     setSelectedPerson(null);
@@ -445,8 +508,10 @@ const Index = () => {
 
   const lookOutWindow = () => {
     playSound('click');
+    const randomStreet = streetDescriptions[Math.floor(Math.random() * streetDescriptions.length)];
+    setStreetDescription(randomStreet);
     const randomMessage = nakedGuestMessages[Math.floor(Math.random() * nakedGuestMessages.length)];
-    setNakedGuestWarnings(prev => [...prev, randomMessage]);
+    setNakedGuestWarnings([randomMessage]);
     setGameState('window');
     
     if (peopleInHouse.length < 2) {
@@ -455,6 +520,24 @@ const Index = () => {
         playSound('door');
         setTimeout(() => playSound('scream'), 1000);
       }, 2000);
+    }
+  };
+
+  const checkSelf = () => {
+    playSound('click');
+    setGameState('self-check');
+  };
+
+  const continueInfectionCutscene = () => {
+    playSound('click');
+    if (infectionCutsceneStep < infectionCutscene.length - 1) {
+      setInfectionCutsceneStep(prev => prev + 1);
+      if (infectionCutsceneStep === 4) {
+        playSound('scream');
+      }
+    } else {
+      setGameState('death');
+      setDeathDialogueIndex(0);
     }
   };
 
@@ -756,20 +839,30 @@ const Index = () => {
                   </div>
                 )}
 
-                <div className="flex gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <Button 
                     onClick={lookOutWindow}
                     variant="outline"
-                    className="flex-1 border-2"
+                    className="border-2"
                     size="lg"
                   >
                     <Icon name="Eye" className="mr-2" size={20} />
-                    Посмотреть в окно
+                    Окно
+                  </Button>
+                  
+                  <Button 
+                    onClick={checkSelf}
+                    variant="outline"
+                    className="border-2"
+                    size="lg"
+                  >
+                    <Icon name="User" className="mr-2" size={20} />
+                    Проверить себя
                   </Button>
                   
                   <Button 
                     onClick={endDay}
-                    className="flex-1 bg-primary hover:bg-primary/90 border-2 border-primary"
+                    className="bg-primary hover:bg-primary/90 border-2 border-primary"
                     size="lg"
                   >
                     <Icon name="Moon" className="mr-2" size={20} />
@@ -1182,19 +1275,29 @@ const Index = () => {
       )}
 
       {gameState === 'window' && (
-        <div className="min-h-screen p-4 bg-black/80">
+        <div className="min-h-screen p-4 bg-black/90">
           <div className="max-w-4xl mx-auto space-y-6 pt-20">
             <Card className="p-8 bg-card border-4 border-destructive animate-pulse-danger">
               <div className="space-y-6 text-center">
-                <div className="text-8xl animate-flicker">👹</div>
-                <h2 className="text-3xl font-bold text-destructive">За окном...</h2>
-                <div className="bg-black/50 p-6 rounded-lg">
-                  {nakedGuestWarnings.map((warning, idx) => (
-                    <p key={idx} className="text-xl text-destructive italic animate-fade-in">
-                      "{warning}"
-                    </p>
-                  ))}
+                <h2 className="text-3xl font-bold text-destructive">🪟 Смотришь в окно</h2>
+                
+                <div className="bg-black/70 p-6 rounded-lg space-y-4">
+                  <p className="text-lg text-muted-foreground italic">
+                    {streetDescription}
+                  </p>
                 </div>
+
+                {nakedGuestWarnings.length > 0 && (
+                  <div className="bg-destructive/20 p-6 rounded-lg border-2 border-destructive">
+                    <div className="text-8xl animate-flicker mb-4">👹</div>
+                    {nakedGuestWarnings.map((warning, idx) => (
+                      <p key={idx} className="text-xl text-destructive italic animate-fade-in">
+                        "{warning}"
+                      </p>
+                    ))}
+                  </div>
+                )}
+
                 {peopleInHouse.length < 2 && (
                   <Alert variant="destructive" className="animate-pulse">
                     <Icon name="AlertTriangle" className="h-4 w-4" />
@@ -1204,7 +1307,10 @@ const Index = () => {
                   </Alert>
                 )}
                 <Button 
-                  onClick={() => setGameState('house')}
+                  onClick={() => {
+                    setGameState('house');
+                    playSound('ambient');
+                  }}
                   className="bg-primary hover:bg-primary/90"
                   size="lg"
                 >
@@ -1295,6 +1401,95 @@ const Index = () => {
                     Вернуться в меню
                   </Button>
                 </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'self-check' && (
+        <div className="min-h-screen p-4 bg-black/90">
+          <div className="max-w-4xl mx-auto flex items-center justify-center min-h-screen">
+            <Card className={`p-12 border-4 ${playerInfected ? 'bg-destructive/20 border-destructive' : 'bg-card border-primary'}`}>
+              <div className="space-y-8 text-center">
+                {playerInfected ? (
+                  <>
+                    <div className="text-9xl animate-shake">🧟</div>
+                    <h2 className="text-4xl font-bold text-destructive animate-flicker">ТЫ ЗАРАЖЁН</h2>
+                    <div className="bg-black/70 p-6 rounded-lg space-y-4">
+                      <p className="text-2xl text-destructive">
+                        Паразит внутри тебя...
+                      </p>
+                      <p className="text-xl text-destructive">
+                        Ты убил {innocentKills} невинных людей
+                      </p>
+                      <p className="text-lg text-muted-foreground italic">
+                        Скоро ты потеряешь контроль...
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-8xl">👤</div>
+                    <h2 className="text-3xl font-bold">Проверка себя</h2>
+                    <div className="bg-secondary/50 p-6 rounded-lg space-y-4">
+                      <p className="text-xl text-primary">✓ Движения нормальные</p>
+                      <p className="text-xl text-primary">✓ Дыхание ровное</p>
+                      <p className="text-xl text-primary">✓ Сознание ясное</p>
+                      <p className="text-xl text-primary">✓ Температура тела в норме</p>
+                    </div>
+                    <p className="text-lg text-muted-foreground">
+                      Ты пока не заражён
+                    </p>
+                    {innocentKills > 0 && (
+                      <Alert variant="destructive">
+                        <Icon name="AlertTriangle" className="h-4 w-4" />
+                        <AlertDescription>
+                          Ты убил {innocentKills} невинных! Ещё {2 - innocentKills} и паразит проникнет в тебя!
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </>
+                )}
+                <Button 
+                  onClick={() => setGameState('house')}
+                  variant={playerInfected ? "destructive" : "default"}
+                  size="lg"
+                >
+                  Назад
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'player-infected' && (
+        <div className="min-h-screen p-4 bg-black">
+          <div className="max-w-4xl mx-auto flex items-center justify-center min-h-screen">
+            <Card className="p-12 bg-destructive/20 border-4 border-destructive">
+              <div className="space-y-8 text-center">
+                <div className="text-9xl animate-shake">🧟</div>
+                <div className="space-y-6">
+                  <p className="text-3xl text-destructive font-bold animate-fade-in">
+                    {infectionCutscene[infectionCutsceneStep]}
+                  </p>
+                  {infectionCutsceneStep >= 4 && (
+                    <div className="text-6xl animate-flicker">
+                      🔪💀🩸
+                    </div>
+                  )}
+                </div>
+                <Button 
+                  onClick={() => {
+                    continueInfectionCutscene();
+                    playSound('tension');
+                  }}
+                  variant="destructive"
+                  size="lg"
+                >
+                  {infectionCutsceneStep < infectionCutscene.length - 1 ? '...' : 'Конец'}
+                </Button>
               </div>
             </Card>
           </div>
