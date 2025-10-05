@@ -166,22 +166,25 @@ const Index = () => {
 
   const generatePerson = (forceStranger: boolean = false): Person => {
     if (forceStranger) {
+      const storyIndex = day - 1;
+      const currentStory = strangerStories[storyIndex] || "Я здесь... Наблюдаю.";
+      
       return {
         id: Date.now(),
         name: 'Незнакомец',
         isInfected: false,
-        avatar: '🚶‍♂️',
+        avatar: '✨',
         suspiciousTraits: [],
         wasChecked: false,
         dialogue: [
-          "Это я... Незнакомец. Впустите, пожалуйста.",
-          "У меня есть что рассказать вам.",
-          "Каждый день я открою вам новую правду.",
-          "Меня нельзя проверить. Я... другой."
+          currentStory,
+          "Я единственный, кто остался человеком.",
+          "Паразит не может меня заразить.",
+          "Вокруг меня светлая аура — видишь?"
         ],
         currentDialogueIndex: 0,
         isStranger: true,
-        strangerStory: strangerStories[day - 1] || "..."
+        strangerStory: currentStory
       };
     }
 
@@ -303,7 +306,7 @@ const Index = () => {
     if (selectedPerson.isStranger) {
       setChatHistory(prev => [...prev, {
         sender: 'system',
-        text: `❌ Незнакомца невозможно проверить. Он другой...`
+        text: `✨ Незнакомца невозможно проверить. Вокруг него светлая аура — он единственный настоящий человек.`
       }]);
       return;
     }
@@ -345,11 +348,20 @@ const Index = () => {
     }]);
 
     setTimeout(() => {
-      if (selectedPerson.isStranger && selectedPerson.strangerStory) {
-        setChatHistory(prev => [...prev, {
-          sender: selectedPerson.name,
-          text: selectedPerson.strangerStory
-        }]);
+      if (selectedPerson.isStranger) {
+        const nextIndex = selectedPerson.currentDialogueIndex + 1;
+        if (nextIndex < selectedPerson.dialogue.length) {
+          setChatHistory(prev => [...prev, {
+            sender: selectedPerson.name,
+            text: selectedPerson.dialogue[nextIndex]
+          }]);
+          setSelectedPerson({...selectedPerson, currentDialogueIndex: nextIndex});
+        } else {
+          setChatHistory(prev => [...prev, {
+            sender: selectedPerson.name,
+            text: "Я здесь, чтобы помочь тебе выжить. Верь мне."
+          }]);
+        }
       } else {
         const nextIndex = selectedPerson.currentDialogueIndex + 1;
         if (nextIndex < selectedPerson.dialogue.length) {
@@ -376,10 +388,9 @@ const Index = () => {
     if (!selectedPerson) return;
     
     if (selectedPerson.isStranger) {
-      playSound('gunshot');
       setChatHistory(prev => [...prev, {
         sender: 'system',
-        text: `❌ Незнакомца нельзя убить. Пули проходят сквозь него...`
+        text: `✨ Курок не нажимается... От Незнакомца исходит светлая аура. Он единственный настоящий человек здесь.`
       }]);
       return;
     }
