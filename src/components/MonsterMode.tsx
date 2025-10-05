@@ -72,6 +72,9 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
     setDialogueHistory(prev => [...prev, { role: 'player', text: playerMessage }]);
     setIsAITyping(true);
     
+    let npcReply = '';
+    let suspicionIncrease = 0;
+    
     try {
       const response = await fetch('https://functions.poehali.dev/ab7b952b-cde4-4cf2-b791-fdc2a931993d', {
         method: 'POST',
@@ -85,46 +88,77 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
         })
       });
       
-      const data = await response.json();
-      
-      setDialogueHistory(prev => [...prev, { role: 'npc', text: data.npc_reply }]);
-      setSuspicion(prev => Math.min(100, prev + (data.suspicion_increase || 0)));
-      
-      setHousePeople(prev => prev.map(p => 
-        p.id === currentNPC.id 
-          ? { ...p, suspicion: Math.min(100, p.suspicion + (data.suspicion_increase || 0)) }
-          : p
-      ));
-      
-      if (Math.random() > 0.7) addParasiteMessage();
-      
-      if (Math.random() > 0.6) {
-        const checkMessages = [
-          "— Дай-ка я посмотрю на твои руки... *щупает* Холодные какие-то...",
-          "— Ты странно дышишь. Ты точно в порядке?",
-          "— Глаза у тебя какие-то стеклянные... Ты не заражён?",
-          "— Двигаешься как-то резко... Покажись на свету.",
-          "— А ну встань сюда, к зеркалу. Хочу проверить кое-что.",
-          "— Что-то от тебя странно пахнет... Ты точно человек?"
-        ];
-        const checkMsg = checkMessages[Math.floor(Math.random() * checkMessages.length)];
-        setDialogueHistory(prev => [...prev, { role: 'npc', text: checkMsg }]);
-        
-        setHousePeople(prev => prev.map(p => 
-          p.id === currentNPC.id 
-            ? { ...p, suspicion: Math.min(100, p.suspicion + 15) }
-            : p
-        ));
-        setSuspicion(prev => Math.min(100, prev + 15));
+      if (response.ok) {
+        const data = await response.json();
+        npcReply = data.npc_reply;
+        suspicionIncrease = data.suspicion_increase || 0;
+      } else {
+        throw new Error('API error');
       }
       
     } catch (error) {
-      setDialogueHistory(prev => [...prev, { 
-        role: 'npc', 
-        text: currentNPC.suspicion > 50 
-          ? "Что-то ты мне не нравишься... Отвечай прямо!" 
-          : "Хм... ладно."
-      }]);
+      const nervousWords = ['пожалуйста', 'умоляю', 'помогите', 'замерзаю', 'холодно'];
+      const hasNervous = nervousWords.some(w => playerMessage.toLowerCase().includes(w));
+      
+      const strangeWords = ['паразит', 'убить', 'кровь', 'голоса', 'мозг'];
+      const hasStrange = strangeWords.some(w => playerMessage.toLowerCase().includes(w));
+      
+      if (hasStrange) {
+        npcReply = "ЧТО?! ТЫ ЗАРАЖЁН! *достаёт пистолет*";
+        suspicionIncrease = 100;
+      } else if (currentNPC.suspicion > 70) {
+        npcReply = "Хватит! Ты ведёшь себя слишком странно. Выметайся!";
+        suspicionIncrease = 20;
+      } else if (currentNPC.suspicion > 50) {
+        const replies = [
+          "Что-то ты мне не нравишься... Отвечай прямо!",
+          "Ты точно не заражён? Покажи руки!",
+          "Хм... не верю я тебе.",
+          "Стой где стоишь. Не двигайся."
+        ];
+        npcReply = replies[Math.floor(Math.random() * replies.length)];
+        suspicionIncrease = hasNervous ? 20 : 10;
+      } else {
+        const replies = [
+          "Хм... ладно.",
+          "Понятно. Ну что ж...",
+          "Хорошо, верю тебе.",
+          "Ладно, проходи дальше."
+        ];
+        npcReply = replies[Math.floor(Math.random() * replies.length)];
+        suspicionIncrease = hasNervous ? 15 : 5;
+      }
+    }
+    
+    setDialogueHistory(prev => [...prev, { role: 'npc', text: npcReply }]);
+    setSuspicion(prev => Math.min(100, prev + suspicionIncrease));
+    
+    setHousePeople(prev => prev.map(p => 
+      p.id === currentNPC.id 
+        ? { ...p, suspicion: Math.min(100, p.suspicion + suspicionIncrease) }
+        : p
+    ));
+    
+    if (Math.random() > 0.7) addParasiteMessage();
+    
+    if (Math.random() > 0.6 && currentNPC.suspicion > 30) {
+      const checkMessages = [
+        "— Дай-ка я посмотрю на твои руки... *щупает* Холодные какие-то...",
+        "— Ты странно дышишь. Ты точно в порядке?",
+        "— Глаза у тебя какие-то стеклянные... Ты не заражён?",
+        "— Двигаешься как-то резко... Покажись на свету.",
+        "— А ну встань сюда, к зеркалу. Хочу проверить кое-что.",
+        "— Что-то от тебя странно пахнет... Ты точно человек?"
+      ];
+      const checkMsg = checkMessages[Math.floor(Math.random() * checkMessages.length)];
+      setDialogueHistory(prev => [...prev, { role: 'npc', text: checkMsg }]);
+      
+      setHousePeople(prev => prev.map(p => 
+        p.id === currentNPC.id 
+          ? { ...p, suspicion: Math.min(100, p.suspicion + 15) }
+          : p
+      ));
+      setSuspicion(prev => Math.min(100, prev + 15));
     }
     
     setPlayerMessage('');
