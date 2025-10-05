@@ -7,7 +7,7 @@ import Icon from '@/components/ui/icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 
-type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal';
+type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone';
 
 interface Person {
   id: number;
@@ -86,6 +86,8 @@ const Index = () => {
   const [userMessage, setUserMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{sender: string, text: string}[]>([]);
   const [discoveredTraits, setDiscoveredTraits] = useState<string[]>([]);
+  const [nakedGuestWarnings, setNakedGuestWarnings] = useState<string[]>([]);
+  const [deathDialogueIndex, setDeathDialogueIndex] = useState(0);
 
   let audioContext: AudioContext | null = null;
 
@@ -162,6 +164,24 @@ const Index = () => {
     "День 5: Паразит не может меня заразить. Я знаю почему, но не могу сказать.",
     "День 6: Каждую ночь я слышу их шёпот. Они зовут меня. Но я не иду.",
     "День 7: Скоро всё закончится. Или начнётся заново.",
+  ];
+
+  const nakedGuestMessages = [
+    "Я вижу тебя через окно... Ты так уязвим...",
+    "Скоро я войду... Дверь не остановит меня...",
+    "Ты один? Как жаль... Я уже иду...",
+    "Я слышу твоё дыхание... Ты боишься?",
+    "Мясо... Свежее мясо... Я голоден...",
+    "Твои друзья уже мертвы... Ты следующий...",
+    "Холод... Вечный холод... Присоединись ко мне...",
+  ];
+
+  const deathDialogue = [
+    "Ты умер.",
+    "Но смерть — это не конец.",
+    "Это лишь начало вечного одиночества.",
+    "Теперь ты будешь здесь... Один... Навсегда.",
+    "Добро пожаловать домой."
   ];
 
   const generatePerson = (forceStranger: boolean = false): Person => {
@@ -423,6 +443,21 @@ const Index = () => {
     setGameState('house');
   };
 
+  const lookOutWindow = () => {
+    playSound('click');
+    const randomMessage = nakedGuestMessages[Math.floor(Math.random() * nakedGuestMessages.length)];
+    setNakedGuestWarnings(prev => [...prev, randomMessage]);
+    setGameState('window');
+    
+    if (peopleInHouse.length < 2) {
+      setTimeout(() => {
+        setGameState('naked-guest');
+        playSound('door');
+        setTimeout(() => playSound('scream'), 1000);
+      }, 2000);
+    }
+  };
+
   const endDay = () => {
     const uncheckedInfected = peopleInHouse.find(p => p.isInfected && !p.wasChecked && !p.isStranger);
     
@@ -431,19 +466,17 @@ const Index = () => {
       setTimeout(() => playSound('scream'), 1500);
       setJournalEntries(prev => [...prev, `Ночь дня ${day}: ${uncheckedInfected.name} потерял контроль. Паразит взял верх. Все мертвы.`]);
       setTimeout(() => {
-        setGameState('menu');
+        setGameState('death');
+        setDeathDialogueIndex(0);
       }, 2000);
       return;
     }
 
-    if (peopleInHouse.length === 0) {
+    if (peopleInHouse.length < 2) {
       setAloneWarning(true);
-      setTimeout(() => playSound('scream'), 1200);
-      setJournalEntries(prev => [...prev, `Ночь дня ${day}: Вы остались один. Гости придут и убьют вас...`]);
-      setTimeout(() => {
-        setJournalEntries(prev => [...prev, `День ${day}: Игра окончена. Гости нашли вас одного.`]);
-        setGameState('menu');
-      }, 2000);
+      setGameState('naked-guest');
+      playSound('door');
+      setTimeout(() => playSound('scream'), 1000);
       return;
     }
 
@@ -452,10 +485,35 @@ const Index = () => {
     setSurvivedDays(prev => prev + 1);
     setJournalEntries(prev => [...prev, `Ночь дня ${day}: День прошёл. Все живы. Вы не одиноки.`]);
     
+    setTimeout(() => {
+      const randomWarning = nakedGuestMessages[Math.floor(Math.random() * nakedGuestMessages.length)];
+      setNakedGuestWarnings([randomWarning]);
+      setGameState('naked-guest');
+      playSound('knock');
+    }, 1000);
+  };
+
+  const continueAfterNakedGuest = () => {
+    if (peopleInHouse.length < 2) {
+      setGameState('death');
+      setDeathDialogueIndex(0);
+      playSound('scream');
+      return;
+    }
+    
     const hasStranger = peopleInHouse.some(p => p.isStranger);
-    setCurrentArrival(hasStranger ? generatePerson() : (nextDay <= 7 && Math.random() > 0.5 ? generatePerson(true) : generatePerson()));
+    setCurrentArrival(hasStranger ? generatePerson() : (day <= 7 && Math.random() > 0.5 ? generatePerson(true) : generatePerson()));
     setGameState('arrival');
-    setTimeout(() => playSound('knock'), 1000);
+    setTimeout(() => playSound('knock'), 500);
+  };
+
+  const continueDeathDialogue = () => {
+    playSound('click');
+    if (deathDialogueIndex < deathDialogue.length - 1) {
+      setDeathDialogueIndex(prev => prev + 1);
+    } else {
+      setGameState('alone');
+    }
   };
 
   return (
@@ -698,14 +756,26 @@ const Index = () => {
                   </div>
                 )}
 
-                <Button 
-                  onClick={endDay}
-                  className="w-full bg-primary hover:bg-primary/90 border-2 border-primary"
-                  size="lg"
-                >
-                  <Icon name="Moon" className="mr-2" size={20} />
-                  Закончить день
-                </Button>
+                <div className="flex gap-4">
+                  <Button 
+                    onClick={lookOutWindow}
+                    variant="outline"
+                    className="flex-1 border-2"
+                    size="lg"
+                  >
+                    <Icon name="Eye" className="mr-2" size={20} />
+                    Посмотреть в окно
+                  </Button>
+                  
+                  <Button 
+                    onClick={endDay}
+                    className="flex-1 bg-primary hover:bg-primary/90 border-2 border-primary"
+                    size="lg"
+                  >
+                    <Icon name="Moon" className="mr-2" size={20} />
+                    Закончить день
+                  </Button>
+                </div>
               </div>
             </Card>
           </div>
@@ -1106,6 +1176,126 @@ const Index = () => {
                   ))}
                 </div>
               </ScrollArea>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'window' && (
+        <div className="min-h-screen p-4 bg-black/80">
+          <div className="max-w-4xl mx-auto space-y-6 pt-20">
+            <Card className="p-8 bg-card border-4 border-destructive animate-pulse-danger">
+              <div className="space-y-6 text-center">
+                <div className="text-8xl animate-flicker">👹</div>
+                <h2 className="text-3xl font-bold text-destructive">За окном...</h2>
+                <div className="bg-black/50 p-6 rounded-lg">
+                  {nakedGuestWarnings.map((warning, idx) => (
+                    <p key={idx} className="text-xl text-destructive italic animate-fade-in">
+                      "{warning}"
+                    </p>
+                  ))}
+                </div>
+                {peopleInHouse.length < 2 && (
+                  <Alert variant="destructive" className="animate-pulse">
+                    <Icon name="AlertTriangle" className="h-4 w-4" />
+                    <AlertDescription>
+                      ОПАСНО! В доме меньше 2 человек! Голый Гость сейчас ворвётся!
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <Button 
+                  onClick={() => setGameState('house')}
+                  className="bg-primary hover:bg-primary/90"
+                  size="lg"
+                >
+                  Отойти от окна
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'naked-guest' && (
+        <div className="min-h-screen p-4 bg-black">
+          <div className="max-w-4xl mx-auto space-y-6 pt-20">
+            <Card className="p-8 bg-destructive/20 border-4 border-destructive">
+              <div className="space-y-6 text-center">
+                <div className="text-9xl animate-shake">👹</div>
+                <h2 className="text-4xl font-bold text-destructive animate-flicker">ГОЛЫЙ ГОСТЬ!</h2>
+                <div className="bg-black/70 p-6 rounded-lg space-y-4">
+                  {nakedGuestWarnings.map((warning, idx) => (
+                    <p key={idx} className="text-2xl text-destructive font-bold animate-pulse-danger">
+                      "{warning}"
+                    </p>
+                  ))}
+                  {peopleInHouse.length < 2 && (
+                    <p className="text-3xl text-destructive font-bold mt-6 animate-flicker">
+                      *ЗВУК ЛОМАЮЩЕЙСЯ ДВЕРИ*
+                    </p>
+                  )}
+                </div>
+                <Button 
+                  onClick={continueAfterNakedGuest}
+                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  size="lg"
+                >
+                  {peopleInHouse.length < 2 ? 'Он ворвался...' : 'Он ушёл... пока...'}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'death' && (
+        <div className="min-h-screen p-4 bg-black">
+          <div className="max-w-4xl mx-auto flex items-center justify-center min-h-screen">
+            <Card className="p-12 bg-black border-4 border-destructive">
+              <div className="space-y-8 text-center">
+                <div className="text-9xl">💀</div>
+                <div className="space-y-6">
+                  <p className="text-4xl text-destructive font-bold animate-fade-in">
+                    {deathDialogue[deathDialogueIndex]}
+                  </p>
+                </div>
+                <Button 
+                  onClick={continueDeathDialogue}
+                  variant="outline"
+                  className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  size="lg"
+                >
+                  {deathDialogueIndex < deathDialogue.length - 1 ? '...' : 'Принять судьбу'}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'alone' && (
+        <div className="min-h-screen p-4 bg-gradient-to-b from-black to-gray-900">
+          <div className="max-w-4xl mx-auto flex items-center justify-center min-h-screen">
+            <Card className="p-12 bg-card/50 border-2">
+              <div className="space-y-8 text-center">
+                <div className="text-8xl">🏠</div>
+                <h2 className="text-3xl font-bold">Ты один в своём доме</h2>
+                <p className="text-xl text-muted-foreground">
+                  Тишина. Покой. Никого вокруг.
+                </p>
+                <p className="text-lg text-muted-foreground">
+                  Всё хорошо... Навсегда...
+                </p>
+                <div className="pt-8">
+                  <Button 
+                    onClick={() => setGameState('menu')}
+                    className="bg-primary hover:bg-primary/90"
+                    size="lg"
+                  >
+                    Вернуться в меню
+                  </Button>
+                </div>
+              </div>
             </Card>
           </div>
         </div>
