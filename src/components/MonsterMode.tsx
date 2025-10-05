@@ -37,6 +37,10 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
   const [deathStep, setDeathStep] = useState(0);
   const [killsToday, setKillsToday] = useState(0);
   const [dayNumber, setDayNumber] = useState(1);
+  const [hunger, setHunger] = useState(0);
+  const [discoveries, setDiscoveries] = useState<string[]>([]);
+  const [inventory, setInventory] = useState<string[]>([]);
+  const [relationships, setRelationships] = useState<{[key: number]: number}>({});
 
   const parasiteVoices = [
     "...убей их...",
@@ -48,7 +52,24 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
     "...голоса... так много голосов...",
     "...я внутри тебя...",
     "...мы — одно...",
-    "...не сопротивляйся..."
+    "...не сопротивляйся...",
+    "...я голоден...",
+    "...накорми меня...",
+    "...ты слабеешь...",
+    "...они знают...",
+    "...беги...",
+    "...прячься...",
+    "...ты уже мёртв..."
+  ];
+
+  const randomEvents = [
+    { type: 'sound', text: 'Ты слышишь странный звук за стеной...', suspicionAdd: 5 },
+    { type: 'mirror', text: 'Ты случайно смотришь в зеркало. Твоё отражение улыбается, хотя ты этого не делаешь.', madnessAdd: 10 },
+    { type: 'blood', text: 'Из носа идёт кровь. Ты вытираешь её, надеясь что никто не видел.', suspicionAdd: 15 },
+    { type: 'twitch', text: 'Твоя рука дёргается сама по себе. Паразит становится сильнее.', madnessAdd: 8 },
+    { type: 'whisper', text: 'Люди шепчутся за твоей спиной...', suspicionAdd: 10 },
+    { type: 'dream', text: 'Ты помнишь сон... Там ты был монстром. Или это не сон?', madnessAdd: 12 },
+    { type: 'food', text: 'Паразит требует пищи. Голод усиливается...', hungerAdd: 20 },
   ];
 
   const startGame = () => {
@@ -275,8 +296,24 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
       }
       return { ...p, suspicion: Math.min(100, p.suspicion + 40) };
     }));
-    setMadness(prev => Math.min(100, prev + 20));
+    setMadness(prev => Math.max(0, prev - 15));
+    setHunger(prev => Math.max(0, prev - 50));
     setKillsToday(prev => prev + 1);
+    
+    const possibleLoots = [
+      { item: '🔑 Ключ от подвала', chance: 0.3 },
+      { item: '📱 Телефон (разряжен)', chance: 0.4 },
+      { item: '💊 Таблетки от головной боли', chance: 0.6 },
+      { item: '🔦 Фонарик', chance: 0.5 },
+      { item: '🗝️ Странный ключ', chance: 0.2 },
+    ];
+    
+    possibleLoots.forEach(loot => {
+      if (Math.random() < loot.chance) {
+        setInventory(prev => [...prev, loot.item]);
+        setDiscoveries(prev => [...prev, `Найден предмет: ${loot.item}`]);
+      }
+    });
     
     addParasiteMessage();
     
@@ -287,6 +324,26 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
       setScreen('ending');
     } else {
       setScreen('inside');
+    }
+  };
+
+  const triggerRandomEvent = () => {
+    const event = randomEvents[Math.floor(Math.random() * randomEvents.length)];
+    setDiscoveries(prev => [...prev, event.text]);
+    if (event.suspicionAdd) setSuspicion(prev => Math.min(100, prev + event.suspicionAdd));
+    if (event.madnessAdd) setMadness(prev => Math.min(100, prev + event.madnessAdd));
+    if (event.hungerAdd) setHunger(prev => Math.min(100, prev + event.hungerAdd));
+  };
+
+  const useItem = (item: string) => {
+    if (item.includes('Таблетки')) {
+      setMadness(prev => Math.max(0, prev - 20));
+      setInventory(prev => prev.filter(i => i !== item));
+      setDiscoveries(prev => [...prev, '💊 Принял таблетки. Голоса стихли...']);
+    } else if (item.includes('Фонарик')) {
+      setSuspicion(prev => Math.max(0, prev - 15));
+      setInventory(prev => prev.filter(i => i !== item));
+      setDiscoveries(prev => [...prev, '🔦 Осветил себя. Люди успокоились.']);
     }
   };
 
@@ -549,13 +606,34 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
             <Badge variant={suspicion > 50 ? "destructive" : "secondary"} className="text-lg px-4 py-2">
               🔍 Подозрение: {suspicion}%
             </Badge>
+            <Badge variant={hunger > 70 ? "destructive" : "outline"} className="text-lg px-4 py-2">
+              🍖 Голод: {hunger}%
+            </Badge>
             <Badge variant="outline" className="text-lg px-4 py-2">
               💀 Убито: {victims.length}/{housePeople.length}
             </Badge>
             <Badge variant={killsToday >= 1 ? "destructive" : "secondary"} className="text-lg px-4 py-2">
-              🌙 День {dayNumber} | Убийств сегодня: {killsToday}/1
+              🌙 День {dayNumber} | Убийств: {killsToday}/1
             </Badge>
           </div>
+
+          {hunger >= 100 && (
+            <Alert className="border-destructive bg-destructive/20 animate-pulse">
+              <Icon name="Skull" className="h-5 w-5 text-destructive" />
+              <AlertDescription className="text-destructive font-bold">
+                ПАРАЗИТ УМИРАЕТ ОТ ГОЛОДА! СРОЧНО НУЖНА ЖЕРТВА!
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {hunger > 70 && hunger < 100 && (
+            <Alert className="border-orange-500 bg-orange-500/20">
+              <Icon name="AlertTriangle" className="h-5 w-5 text-orange-500" />
+              <AlertDescription className="text-orange-500 font-bold">
+                Паразит голоден... Ты чувствуешь слабость...
+              </AlertDescription>
+            </Alert>
+          )}
 
           {parasiteMessages.length > 0 && (
             <Alert className="border-destructive bg-destructive/20 animate-pulse">
@@ -606,17 +684,42 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
                       </div>
                       {person.alive && (
                         <div className="space-y-2">
-                          <Button 
-                            onClick={() => {
-                              setCurrentNPC(person);
-                              setScreen('talk');
-                            }}
-                            size="sm"
-                            variant="outline"
-                            className="w-full"
-                          >
-                            💬 Поговорить
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button 
+                              onClick={() => {
+                                setCurrentNPC(person);
+                                setScreen('talk');
+                              }}
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              💬 Поговорить
+                            </Button>
+                            <Button 
+                              onClick={() => {
+                                if (inventory.some(i => i.includes('Таблетки'))) {
+                                  const item = inventory.find(i => i.includes('Таблетки'))!;
+                                  setInventory(prev => prev.filter(i => i !== item));
+                                  setHousePeople(prev => prev.map(p => 
+                                    p.id === person.id ? { ...p, suspicion: Math.max(0, p.suspicion - 30) } : p
+                                  ));
+                                  setDiscoveries(prev => [...prev, `Дал таблетки ${person.name}. Они стали доверчивее.`]);
+                                } else {
+                                  const giftSuspicionReduce = Math.floor(Math.random() * 15) + 10;
+                                  setHousePeople(prev => prev.map(p => 
+                                    p.id === person.id ? { ...p, suspicion: Math.max(0, p.suspicion - giftSuspicionReduce) } : p
+                                  ));
+                                  setDiscoveries(prev => [...prev, `Помог ${person.name}. Они стали доверчивее.`]);
+                                }
+                              }}
+                              size="sm"
+                              variant="ghost"
+                              className="flex-1"
+                            >
+                              🤝 Помочь
+                            </Button>
+                          </div>
                           <Button 
                             onClick={() => {
                               if (killsToday >= 1) {
@@ -654,12 +757,51 @@ const MonsterMode = ({ onExit, playSound }: MonsterModeProps) => {
                 </Alert>
               )}
 
+              {inventory.length > 0 && (
+                <Card className="p-4 bg-primary/5">
+                  <h3 className="font-bold mb-3 flex items-center gap-2">
+                    <Icon name="Backpack" size={20} />
+                    Инвентарь
+                  </h3>
+                  <div className="space-y-2">
+                    {inventory.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2">
+                        <span className="text-sm">{item}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => useItem(item)}
+                        >
+                          Использовать
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {discoveries.length > 0 && (
+                <Card className="p-4 bg-muted/50">
+                  <h3 className="font-bold mb-2 flex items-center gap-2">
+                    <Icon name="ScrollText" size={20} />
+                    Последние события
+                  </h3>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {discoveries.slice(-3).map((d, idx) => (
+                      <div key={idx}>• {d}</div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               <Button
                 onClick={() => {
                   setKillsToday(0);
                   setDayNumber(prev => prev + 1);
                   setSuspicion(prev => Math.max(0, prev - 10));
                   setMadness(prev => Math.min(100, prev + 10));
+                  setHunger(prev => Math.min(100, prev + 25));
+                  if (Math.random() > 0.5) triggerRandomEvent();
                   addParasiteMessage();
                   playSound('door');
                 }}
