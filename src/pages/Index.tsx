@@ -7,8 +7,9 @@ import Icon from '@/components/ui/icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import MonsterMode from '@/components/MonsterMode';
+import HouseActivities from '@/components/HouseActivities';
 
-type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone' | 'player-infected' | 'self-check' | 'tv' | 'monster-mode';
+type GameState = 'menu' | 'arrival' | 'door-dialogue' | 'house' | 'inspection' | 'dialogue' | 'kcs' | 'journal' | 'window' | 'naked-guest' | 'death' | 'alone' | 'player-infected' | 'self-check' | 'tv' | 'monster-mode' | 'activities';
 
 interface Person {
   id: number;
@@ -1023,7 +1024,7 @@ const Index = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <Button 
                     onClick={lookOutWindow}
                     variant="outline"
@@ -1042,6 +1043,19 @@ const Index = () => {
                   >
                     <Icon name="User" className="mr-2" size={20} />
                     Себя
+                  </Button>
+
+                  <Button 
+                    onClick={() => {
+                      playSound('click');
+                      setGameState('activities');
+                    }}
+                    variant="outline"
+                    className="border-2"
+                    size="lg"
+                  >
+                    <Icon name="Home" className="mr-2" size={20} />
+                    Активности
                   </Button>
                 </div>
 
@@ -1065,7 +1079,7 @@ const Index = () => {
                     size="lg"
                   >
                     <Icon name="Moon" className="mr-2" size={20} />
-                    День
+                    Закончить день
                   </Button>
                 </div>
               </div>
@@ -1786,6 +1800,15 @@ const Index = () => {
         <MonsterMode 
           onExit={() => setGameState('menu')}
           playSound={playSound}
+        />
+      )}
+
+      {gameState === 'activities' && (
+        <HouseActivities 
+          onBack={() => setGameState('house')}
+          addJournalEntry={(entry) => setJournalEntries(prev => [...prev, entry])}
+          playSound={playSound}
+          day={day}
         />
       )}
     </div>
